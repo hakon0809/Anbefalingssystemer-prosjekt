@@ -106,13 +106,13 @@ def centered_cosine(df):
         df.loc[df.userId == userId, ['activeTime']] = activeTimeS
 
     # SIMILIARITY CHECK --
-    cosine_similiarity(df)
+    cosine_similiarity_activetime(df)
 
 
     return df
 
  
-def cosine_similiarity(df):
+def cosine_similiarity_activetime(df):
     '''
         Loop through activeTimes and find similarities for one user towards every users in the system
         sim(A, B) = Ai * Bi / sqrt( Ai ^2 ) * sqrt( Bi ^2 )
@@ -130,8 +130,10 @@ def cosine_similiarity(df):
                 pass #Compare users, if same, skip to next user.
             else: 
                 # TODO:
-                # need to do a check on documentIds
-                # If they dont share documentId's then skip
+                # 1. need to do a check on documentIds
+                # 2. If they dont share documentId's then = 0 in similarity
+                # 3. Need to have a check on Numpy SquareRoot, if numbers are too small we get error, set an
+                #      treshold of 0.00001 as minimum or something..
 
 
 
@@ -147,8 +149,9 @@ def cosine_similiarity(df):
                                 #sum dot product        /   squareRoot(user1's activeTime^2) * quareRoot(user2's activeTime^2)
                 cosine_sim = sum(multiply_user1_user2) / ( np.sqrt(user1_square_sum) * np.sqrt(user2_square_sum) )
 
-
-                df['cosineSim_activeTime'] =  str(cosine_sim + "|" + str(userId_1) + " compared to " + str(userId_2))
+                #final_string = str(str(cosine_sim) + "|" + str(userId_1) + " compared to " + str(userId_2))
+              
+                df['cosineSim_activeTime'] = str(str(cosine_sim) + "|" + str(userId_1) + " compared to " + str(userId_2))
                 
         
    
@@ -244,7 +247,7 @@ if __name__ == '__main__':
     end = timer()
     print("The time that went by: ", end-start, "seconds")
     print(df.head())
-
+    print("Stop here")
 
 
 
