@@ -5,7 +5,7 @@ import sklearn
 from dataUtils import DataUtils
 from dataAggregator import DataAggregator
 from baselines import MostPopularRecommender, MostRecentRecommender
-from evalMethods import *
+from evalMethods import evaluate_recall, evaluate_arhr, evaluate_mse
 
 # def statistics(df):
 #     """
@@ -33,17 +33,21 @@ from evalMethods import *
 
 if __name__ == '__main__':
     dataHelper = DataUtils()
+    print("loading data...")
     entries = dataHelper.load_data("active1000")
+    print("data loaded.")
 
     # Filter out unhelpful rows
+    print("filtering data...")
     filtered_data = dataHelper.filter_data(entries)
+    print("data filtered.")
 
     # Re-index document and user IDs to start at 0 and be sequential
     # acts in-place, kind of confusing, possibly a TODO for later
-    dataHelper.index_data(filtered_data)
+    indexed_data = dataHelper.index_data(filtered_data)
 
     # Convert indexed data to a dataframe
-    raw_events = dataHelper.get_dataframe(filtered_data)
+    raw_events = dataHelper.get_dataframe(indexed_data)
 
     # Fix dates, clean up categories, and populate missing data (eventually)
     events = dataHelper.process_data(raw_events)
@@ -52,6 +56,7 @@ if __name__ == '__main__':
     # pass just train set to aggregator
     agg = DataAggregator()
     agg.generateArticleData(events, dataHelper.nextDocumentID)
+    agg.generateUserData(events, dataHelper.nextUserID)
 
     recommender = MostPopularRecommender(agg.articles)
 
