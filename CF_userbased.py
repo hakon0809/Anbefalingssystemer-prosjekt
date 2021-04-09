@@ -128,12 +128,12 @@ def replace_none_activetime_with_average(df):
         with average time of activeTime found.
 
     '''
-    
     # A DF of values
     documentIds_value = df.loc[df.activeTime.notnull(), ['documentId','activeTime']]
     # A DF of none values
     documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
     #documentIds_null_2 = documentIds_null.copy()
+    i = 0
     # Find all documentIds with activeTime == None/NaN/null/whatever
     for docuId in documentIds_null['documentId']:
         
@@ -150,7 +150,9 @@ def replace_none_activetime_with_average(df):
             documentIds_null.loc[documentIds_null.documentId == docuId, 'activeTime'] = int(document_list_sum / document_list_len)
 
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
+
     df.to_csv('df_with_average_activetime.csv')
+
     return df
 
 def preprocessing_data(df):
@@ -340,6 +342,7 @@ def print_statistics(df):
 if __name__ == '__main__':
     df = load_data("active1000")
     #df = load_one_file('active1000/20170101')
+    #df = pd.read_csv('df_with_average_activetime.csv')
 
     # TODO:
     # Focus on category after activetime
