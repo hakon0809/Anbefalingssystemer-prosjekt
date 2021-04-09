@@ -197,8 +197,7 @@ def predict_active_time(df,similarity_matrix, rating_matrix):
 def content_recommendation_m1(rating_matrix, similarity_matrix, train, test):
     pred = []
     actual = []
-    #rating_matrix.shape[0]
-    result = []
+
     for user in range(rating_matrix.shape[0]):
         train_index_array = train[user, :].nonzero()[0]
         train_value_array = rating_matrix[user,train_index_array]
@@ -208,7 +207,7 @@ def content_recommendation_m1(rating_matrix, similarity_matrix, train, test):
         actual.append(test_index_array)
 
         highest_train_active_time_doc = train_index_array[np.argmax(train_value_array)]
-        
+
         nr_predictions = len(test_index_array) + 1
         sim_array = similarity_matrix[highest_train_active_time_doc,:]
         user_pred = []
@@ -219,20 +218,20 @@ def content_recommendation_m1(rating_matrix, similarity_matrix, train, test):
             user_pred.append(prediction)
             nr_predictions -= 1
 
-        pred.append(user_pred[1:])
-        tp = 0
-        for x in user_pred[1:]:
-            if x in test_index_array:
-                tp += 1
-        result.append((tp, evaluate_recall([user_pred[1:]], test_index_array)))
-    print(result)
+        # slice first element to remove similarity between the document itself 
+        # pred.append(user_pred[1:])
+        pred += [user_pred[1:] for i in range(len(test_index_array))]
+
+
+    actual = [x for row in actual for x in row] 
+    return pred, actual
+    # print(result)
 
 #recommend most similar to item with highest active time, not previously read
 def content_recommendation_m2(rating_matrix, similarity_matrix, train, test):
     pred = []
     actual = []
-    #rating_matrix.shape[0]
-    result = []
+    
     for user in range(rating_matrix.shape[0]):
         train_index_array = train[user, :].nonzero()[0]
         train_value_array = rating_matrix[user,train_index_array]
@@ -254,14 +253,12 @@ def content_recommendation_m2(rating_matrix, similarity_matrix, train, test):
                 nr_predictions -= 1
             else:
                 pass
+        # slice first element to remove similarity between the document itself 
+        # pred.append(user_pred[1:])
+        pred += [user_pred[1:] for i in range(len(test_index_array))]
 
-        pred.append(user_pred[1:])
-        tp = 0
-        for x in user_pred[1:]:
-            if x in test_index_array:
-                tp += 1
-        result.append((tp, evaluate_recall([user_pred[1:]], test_index_array)))
-    print(result)
+    actual = [x for row in actual for x in row] 
+    return pred, actual
 
 def content_recommendation(rating_matrix, similarity_matrix):
     #TODOES
@@ -270,8 +267,14 @@ def content_recommendation(rating_matrix, similarity_matrix):
     #bayes classifier maybe
 
     train, test = train_test_split(rating_matrix)
-    content_recommendation_m1(rating_matrix, similarity_matrix, train, test)
-    content_recommendation_m2(rating_matrix, similarity_matrix, train, test)
+    pred, actual = content_recommendation_m1(rating_matrix, similarity_matrix, train, test)
+    print('Metode 1')
+    print(evaluate_recall(pred, actual))
+    pred, actual = content_recommendation_m2(rating_matrix, similarity_matrix, train, test)
+    print('Metode 2')
+    print(evaluate_recall(pred, actual))
+    #content_recommendation_m2(rating_matrix, similarity_matrix, train, test)
+
     return
 
     
