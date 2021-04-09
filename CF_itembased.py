@@ -18,60 +18,54 @@ def shape_data(df):
     df = df[~df['documentId'].isnull()]
     df.drop_duplicates(subset=['userId', 'documentId'], inplace=True)
     df = df.sort_values(by=['userId', 'time'])
+    article_names = df[['title', 'documentId']]
+    article_names.drop_duplicates(inplace=True)
     df = df.drop(['eventId', 'category', 'title', 'url', 'publishtime', 'time'], axis=1)
     # print(df[40:48])
     df.columns = ['activetime', 'user', 'article']
     df['activetime'].fillna(value=df['activetime'].mean()/3, inplace=True)
-    # df['activetime'].fillna(value=0, inplace=True)
+    # df['activetime'].fillna(value=0, inplace=True)   
     # df['activetime'].fillna(value= df.groupby(['user']).activetime.mean(), inplace=True)
-    # print(df[:5])
-    n_users = df['user'].nunique()
-    n_items = df['article'].nunique()
-
-    # ratings = np.zeros((n_users, n_items))
-    # new_user = df['userId'].values[1:] != df['userId'].values[:-1]
-    # new_user = np.r_[True, new_user]
-    # df['uid'] = np.cumsum(new_user)
-    # item_ids = df['documentId'].unique().tolist()
-    # user_ids = df['userId'].unique().tolist()
-
-    # active_times = df['activetime'].unique().tolist()
-    # print(active_times[:10])
     
-    return df
+    return df, article_names
 
-def implicit_als(df):
-
+def implicit_als(df, article_names):
+    # print(df['user'][40:48])
     df['user'] = df['user'].astype("category")
     df['article'] = df['article'].astype("category")
-
+    
     new_user = df['user'].values[1:] != df['user'].values[:-1]
     new_user = np.r_[True, new_user]
     df['user_id'] = np.cumsum(new_user)
-
+    # print(df[40:48])
+    # print(df['user_id'][40:48])
+    # print(df['article'][40:48])
     # df['user_id'] = df['user_id'].cat.codes
     df['article_id'] = df['article'].cat.codes
-
+    # print(df[40:48])
     # print(df['article_id'][40:48])
     # print(df[1800:1840])
-
 
     sparse_item_user = sparse.csr_matrix((df['activetime'].astype(float), (df['article_id'], df['user_id'])))
     sparse_user_item = sparse.csr_matrix((df['activetime'].astype(float), (df['user_id'], df['article_id'])))
 
-    # print(sparse_item_user[:10])
+    # print(sparse_item_user[40:48])
 
     model = implicit.als.AlternatingLeastSquares(factors=20, regularization=0.1, iterations=20)
 
     # Calculate the confidence by multiplying it by our alpha value.
-    alpha_val = 15
+    alpha_val = 40
     data_conf = (sparse_item_user * alpha_val).astype('double')
 
     #Fit the model
     model.fit(data_conf)
 
-    item_id = 9983      #959778
-    # item_id = 14515   #962662
+    #------------------
+    # ITEM SIMILARITY
+    #------------------
+
+    item_id = 9983      #959778 - langrenn, sport
+    # item_id = 14515   #962662 - lokalnyheter, ulykker
     # item_id = 3336    #962665
     # item_id = 771     #867734
     n_similar = 10
@@ -82,15 +76,16 @@ def implicit_als(df):
     # Print the names of our most similar articles
     for item in similar:
         idx, score = item
-        print(df.article.loc[df.article_id == idx].iloc[0])
+        print(article_names.loc[article_names.documentId == df.article.loc[df.article_id == idx].iloc[0]].iloc[0].title)
+
     
 
     #------------------------------
     # CREATE USER RECOMMENDATIONS
     #------------------------------
 
-    # Create recommendations for user with id 4
-    user_id = 4
+    # Create recommendations for a given user_id
+    user_id = 69
 
     # Use the implicit recommender.
     recommended = model.recommend(user_id, sparse_user_item)
@@ -107,27 +102,18 @@ def implicit_als(df):
     # Create a dataframe of articles and scores
     recommendations = pd.DataFrame({'article': articles, 'score': scores})
 
-    # article_titles = []
-    # for article in recommendations:
-    #     art, score = article
-    #     article_titles.append(df.article.loc[df.article == art].iloc[0])
-    # print(article_titles)
+    # Get article name from article_id
+    article_titles = []
+    for article in recommendations['article']:
+        article_titles.append(article_names.loc[article_names.documentId == article].iloc[0].title)
 
     print(recommendations)
-
-
-
-
-# 7e98f8a1a50a409a25831be225e01e261dfe04fc
-# 9e1a8fe1f3370099aff8529a9381fdabd7d5d74a
-# b1b9d6843e7e9a5b146979c3cd1303cfacae584d
-# b28e7c163c39941aa1cbd0b7b3a821576771f893
+    print(article_titles)
     
-
 
 df=load_data("active1000")
 
 
-data = shape_data(df)
-implicit_als(data)
+data, article_names = shape_data(df)
+implicit_als(data, article_names)
 # print(data[:10])
