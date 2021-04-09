@@ -126,10 +126,6 @@ def replace_none_activetime_with_average(df):
         with average time of activeTime found.
 
     '''
-    # DF size                = 7100379
-    # documentIds_value size =  818558
-    # documentIds_null size  =  759304
-    # Therefore I am cutting out smaller DataFrames so it wont be to computation heavy
     
     # A DF of values
     documentIds_value = df.loc[df.activeTime.notnull(), ['documentId','activeTime']]
@@ -149,16 +145,8 @@ def replace_none_activetime_with_average(df):
         if document_list_len <= 0 | document_list_sum <= 0:
             pass
         else:
-            # Find the originale position within the dataframe of the document without activeTime, set that time to what we found.
-            #df.loc[(df.activeTime.isnull()) & (df.documentId == docuId), 'activeTime'] = document_list_sum / document_list_len
-            
             documentIds_null.loc[documentIds_null.documentId == docuId, 'activeTime'] = int(document_list_sum / document_list_len)
 
-
-            #print("For documentId: ", docuId, "\n we have the list of: \n", document_list )
-            #print( "this list has a lenght of: ", len(document_list), "\n", "which will give an average of: ")
-            #print("\n", str(document_list.sum() / len(document_list)))
-    
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
     return df
 
@@ -208,14 +196,14 @@ def cosine_similiarity(df):
     '''
     similarity_dataFrame = pd.DataFrame(columns=df['userId'])
 
-    for userId_1 in df['userId']:
+    for userId_1 in df['userId'].unique():
         cosine_sim_list = []
         userId_2_list = []
         sim_dict = {}
         #table consist of activeTime and documentId so we keep track of which documents we are comparing.
         #user1_table = df.loc[df.userId == userId_1, ['activeTime','documentId']]
 
-        for userId_2 in df['userId']: # The next user we want to loop on
+        for userId_2 in df['userId'].unique(): # The next user we want to loop on
             
             # iloc allows us to loop on the list
             #user2_table = df.loc[df.userId == userId_2, ['activeTime', 'documentId']]
@@ -223,7 +211,7 @@ def cosine_similiarity(df):
             if userId_1 == userId_2:
                 pass #same user so skip
             elif find_documents_in_common(userId_1, userId_2):
-
+                common_docs = find_documents_in_common(userId_1, userId_2)
                 user1_table = df.loc[df.userId == userId_1, ['activeTime','documentId']]
                 user2_table = df.loc[df.userId == userId_2, ['activeTime', 'documentId']]
                 #print("user1_table: \n", user1_table)
@@ -240,8 +228,9 @@ def cosine_similiarity(df):
                 # activete = None --> average av alle som har sett på den artikkel.
 
                 # User1's activeTime1 * User2's activeTime1 aka "dot product" of user1 and user2
-                multiply_user1_user2 = [round(x*y, 2) for x, y, in zip(user1_table['activeTime'], user2_table['activeTime'])]
-
+                multiply_user1_user2 = [x*y for x, y, in zip(user1_table['activeTime'], user2_table['activeTime'])]
+                multiply_user1_user2 = sum(multiply_user1_user2)
+                multiply_user1_user2 = round(multiply_user1_user2, 2)
                 # user1's activeTime1^2  
                 user1_square_sum = round(sum( [np.square(x) for x in user1_table['activeTime'] if x != 0.0] ), 2) 
                 
@@ -249,14 +238,19 @@ def cosine_similiarity(df):
                 
                 #check that multiply_user1_user2 are actually a int list and gets a correct sum
                                 #sum dot product        /   squareRoot(user1's activeTime^2) * quareRoot(user2's activeTime^2)
-                cosine_sim = round(sum(multiply_user1_user2) /  round(np.sqrt(user1_square_sum), 4) * round( np.sqrt(user2_square_sum),4), 2)
+                temp_user1 = round(np.sqrt(user1_square_sum), 4)
+                temp_user2 = round(np.sqrt(user2_square_sum), 4)
+                temp_user1_w_user2 = temp_user1 * temp_user2
+                cosine_sim_2 = round((multiply_user1_user2 / temp_user1_w_user2), 4)
+
+                cosine_sim = round (multiply_user1_user2 /  round(np.sqrt(user1_square_sum), 4) * round( np.sqrt(user2_square_sum),4), 2)
 
                 #cosine_sim_list.append({)
 
-                cosine_sim_list.append(str(cosine_sim))
+                cosine_sim_list.append(str(cosine_sim_2))
                 userId_2_list.append(str(userId_2)) 
                     
-                df['cosineSim_activeTime'] =  str(cosine_sim) + "|" + str(userId_1) + " compared to " + str(userId_2)
+                df['cosineSim_activeTime'] =  str(cosine_sim_2) + "|" + str(userId_1) + " compared to " + str(userId_2)
 
             else: # They are not sharing any documents in common, therefore they are similar with 0.
                 cosine_sim_list.append(str(0))
@@ -265,7 +259,13 @@ def cosine_similiarity(df):
         #TODO: Build the dataframe
         #TODO: need to find another way
 
-        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index))
+        #similarity_dataFrame.insert(loc=len(similarity_dataFrame.index))
+        
+        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str(userId_1), value=cosine_sim_list)
+        print(
+            similarity_dataFrame.head()
+        )
+        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str("User: " + str(userId_1) + "compared_to"), value=userId_2_list)
         #for i in len(userId_2_list):
         #    similarity_dataFrame.loc[i]
 
@@ -273,8 +273,8 @@ def cosine_similiarity(df):
         #similarity_dataFrame = pd.DataFrame(cosine_sim_list, columns=userId_2_list, index=str(userId_1))
 
         #similarity_dataFrame[str("user: " + str(userId_1) + " similarity")] = cosine_sim_list
-        similarity_dataFrame[str(userId_1)] = cosine_sim_list
-        similarity_dataFrame[str(str(userId_1) + "_users_compared_to")] = userId_2_list
+        #similarity_dataFrame[str(userId_1)] = cosine_sim_list
+        #similarity_dataFrame[str(str(userId_1) + "_users_compared_to")] = userId_2_list
         #similarity_dataFrame.insert(loc=len(similarity_dataFrame.columns), column=str(userId_1), value=cosine_sim_list)
         #similarity_dataFrame.insert(loc=len(similarity_dataFrame.columns), column=str(userId_1 + " users"), value=userId_2_list)
         print(
