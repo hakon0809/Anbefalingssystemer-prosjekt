@@ -65,14 +65,16 @@ def remove_all_none_values(df):
     amount_before = df.shape[0]
 
     df = df[df['eventId'].notnull()]
+    
+    df = df[df['documentId'].notnull()]
+    df = df[df['userId'].notnull()]
+
     #df = df[df['category'].notnull()]
     #df = df[df['activeTime'].notnull()]
     #df = df[df['title'].notnull()]
     #df = df[df['url'].notnull()]
     #df = df[df['publishtime'].notnull()]
     #df = df[df['time'].notnull()]
-    df = df[df['documentId'].notnull()]
-    df = df[df['userId'].notnull()]
 
     amount_after = df.shape[0]    
 
@@ -148,15 +150,21 @@ def replace_none_activetime_with_average(df):
             documentIds_null.loc[documentIds_null.documentId == docuId, 'activeTime'] = int(document_list_sum / document_list_len)
 
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
+    df.to_csv('df_with_average_activetime.csv')
     return df
 
 def preprocessing_data(df):
     
 
-    df = remove_all_none_values(df)
+    #df = remove_all_none_values(df)
+    print(df.dtypes  )
+    df = df[df['eventId'].notnull()]
+    df = df[df['documentId'].notnull()]
+    df = df[df['userId'].notnull()]
 
     df['userId'] = pd.factorize(df['userId'])[0]
     df['documentId'] = pd.factorize(df['documentId'])[0]
+
     df['time'] = converte_seconds_to_date_format(df, column='time')
     df['publishtime'] = converte_seconds_to_date_format(df, column='publishtime')
 
@@ -266,6 +274,8 @@ def cosine_similiarity(df):
             similarity_dataFrame.head()
         )
         similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str("User: " + str(userId_1) + "compared_to"), value=userId_2_list)
+
+
         #for i in len(userId_2_list):
         #    similarity_dataFrame.loc[i]
 
@@ -328,9 +338,8 @@ def print_statistics(df):
     )
 
 if __name__ == '__main__':
-    #df = load_data("active1000")
+    df = load_data("active1000")
     #df = load_one_file('active1000/20170101')
-    df = pd.read_csv('df_with_average_activetime.csv')
 
     # TODO:
     # Focus on category after activetime
