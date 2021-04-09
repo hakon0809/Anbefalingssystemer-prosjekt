@@ -166,10 +166,10 @@ def preprocessing_data(df):
     #dataProcessing = dataUtils.DataUtils()
     #df['url'] = dataProcessing.filter_data(df)
 
-    start = timer()
-    df = replace_none_activetime_with_average(df)
-    end = timer()
-    print("The time that went by for replace none with average: ", end-start, "seconds")
+    #start = timer()
+    #df = replace_none_activetime_with_average(df)
+    #end = timer()
+    #print("The time that went by for replace none with average: ", end-start, "seconds")
 
     return df
 
@@ -329,7 +329,8 @@ def print_statistics(df):
 
 if __name__ == '__main__':
     #df = load_data("active1000")
-    df = load_one_file('active1000/20170101')
+    #df = load_one_file('active1000/20170101')
+    df = pd.read_csv('df_with_average_activetime.csv')
 
     # TODO:
     # Focus on category after activetime
