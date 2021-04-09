@@ -116,9 +116,6 @@ def centered_cosine(df):
                 activeTimeS.iloc[i] = 0.0         
         df.loc[df.userId == userId, ['activeTime']] = activeTimeS
 
-    
-
-
     return df
 
 def replace_none_activetime_with_average(df):
@@ -132,11 +129,13 @@ def replace_none_activetime_with_average(df):
     documentIds_value = df.loc[df.activeTime.notnull(), ['documentId','activeTime']]
     # A DF of none values
     documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
-    #documentIds_null_2 = documentIds_null.copy()
+    #counter
     i = 0
+    half_way = len(documentIds_null['documentId'])
     # Find all documentIds with activeTime == None/NaN/null/whatever
     for docuId in documentIds_null['documentId']:
-        
+        #Increment
+        i +=0
         # Find all activeTimes of the first documentId==None. NB Here it is important that we find only real values
         # therefore the "..notnull()"
         new_documentIds_value = documentIds_value[documentIds_value.documentId == docuId].activeTime
@@ -148,6 +147,9 @@ def replace_none_activetime_with_average(df):
             pass
         else:
             documentIds_null.loc[documentIds_null.documentId == docuId, 'activeTime'] = int(document_list_sum / document_list_len)
+        
+        if half_way == i:
+            None
 
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
 
@@ -176,10 +178,10 @@ def preprocessing_data(df):
     #dataProcessing = dataUtils.DataUtils()
     #df['url'] = dataProcessing.filter_data(df)
 
-    #start = timer()
-    #df = replace_none_activetime_with_average(df)
-    #end = timer()
-    #print("The time that went by for replace none with average: ", end-start, "seconds")
+    start = timer()
+    df = replace_none_activetime_with_average(df)
+    end = timer()
+    print("The time that went by for replace none with average: ", end-start, "seconds")
 
     return df
 
