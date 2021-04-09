@@ -11,9 +11,7 @@ from project_example import load_data, load_dataset, train_test_split
 
 def shape_data(df):
     """
-        Convert dataframe to user-item-interaction matrix, which is used for 
-        Matrix Factorization based recommendation.
-        In rating matrix, clicked events are refered as 1 and others are refered as 0.
+        Shape data in [activetime, user, article]
     """
     df = df[~df['documentId'].isnull()]
     df.drop_duplicates(subset=['userId', 'documentId'], inplace=True)
@@ -85,7 +83,7 @@ def implicit_als(df, article_names):
     #------------------------------
 
     # Create recommendations for a given user_id
-    user_id = 69
+    user_id = 1
 
     # Use the implicit recommender.
     recommended = model.recommend(user_id, sparse_user_item)
