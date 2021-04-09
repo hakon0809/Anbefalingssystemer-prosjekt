@@ -13,7 +13,7 @@ class DataUtils:
         self.knownDocumentIDs = {}
         self.nextDocumentID = 0
 
-    def load_data(self, path):
+    def load_data(self, path, num=0):
         data=[]
         for file in os.listdir(path):
             filename = os.path.join(path, file)
@@ -24,13 +24,15 @@ class DataUtils:
 
                     if not entry is None:
                         data.append(entry)
-            break # TODO: this only loads the first day of data
+            num -= 1
+            if num == 0:
+                break # breaking only loads the first num files, 0 means all
         return data
 
     def filter_data(self, entries):
         # Throw out any entries (events) which are for blacklisted urls (uninteresting data)
         # Throw out any entries which lack a documentId (for now, can be improved later)
-        # TODO: do not throw out missing documentID, only forbidden_urls
+        # TODO: try to not throw out missing documentID, only forbidden_urls
         return [e for e in entries if e["url"] not in self.forbidden_urls and e["documentId"] is not None]
 
     def index_data(self, entries):
@@ -64,10 +66,16 @@ class DataUtils:
         return pd.DataFrame(entries)
 
     def process_data(self, events):
-        events.info()
+
         # Convert category metadata from "a|b" to ["a","b"]
         events = events.assign(categories=lambda e: e["category"].str.split("|"))
         del events['category']
+
+        # Make list of all unique categories
+        allCategories = set()
+        for categories in events["categories"]:
+            if categories is not None: 
+                allCategories.update(categories)
 
         # Convert time from unix epoch time to python datetime (or, dont do that)
         events['eventTime'] = events['time'] #.apply(lambda x: pd.to_datetime(x, unit="s", utc=True))
@@ -81,5 +89,4 @@ class DataUtils:
 
         # TODO: If missing date or category metadata, recover from URL (more powerful if we dont filter out missing documentIDs)
         # TODO: distinguish between time of day missing (date recovered from URL) and midnight time 00:00:00
-        events.info()
-        return events
+        return events, allCategories
