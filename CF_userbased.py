@@ -111,7 +111,7 @@ def centered_cosine(df):
         # Loop on all activitimes of the specific userId, updates its activeTime
         for i in range(len(activeTimeS)):
             if activeTimeS.iloc[i].notna().bool() == True: # NaN check
-               activeTimeS.iloc[i] = float(activeTimeS.iloc[i] - round(mean_of_that_user, 2))
+               activeTimeS.iloc[i] = round(float(activeTimeS.iloc[i] - round(mean_of_that_user, 2)), 2)
             else: 
                 activeTimeS.iloc[i] = 0.0         
         df.loc[df.userId == userId, ['activeTime']] = activeTimeS
@@ -129,13 +129,9 @@ def replace_none_activetime_with_average(df):
     documentIds_value = df.loc[df.activeTime.notnull(), ['documentId','activeTime']]
     # A DF of none values
     documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
-    #counter
-    i = 0
-    half_way = len(documentIds_null['documentId'])
+
     # Find all documentIds with activeTime == None/NaN/null/whatever
     for docuId in documentIds_null['documentId']:
-        #Increment
-        i +=0
         # Find all activeTimes of the first documentId==None. NB Here it is important that we find only real values
         # therefore the "..notnull()"
         new_documentIds_value = documentIds_value[documentIds_value.documentId == docuId].activeTime
@@ -148,12 +144,19 @@ def replace_none_activetime_with_average(df):
         else:
             documentIds_null.loc[documentIds_null.documentId == docuId, 'activeTime'] = int(document_list_sum / document_list_len)
         
-        if half_way == i:
-            None
-
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
+    
+    #df = centered_cosine(df)
+    #temp_data = df[['documentId','activeTime', 'userId']]
 
-    df.to_csv('df_with_average_activetime.csv')
+    #print(temp_data)
+
+    df.to_csv('df_with_average_activetime.csv', index=False)
+
+    #new_df = pd.DataFrame(documentIds_null) 
+
+    #for id, chunk in enumerate(np.array_split(new_df, 4)): 
+    #    chunk.to_csv(f'new_df_avg_activetime_{id}.csv', index=False) 
 
     return df
 
@@ -182,7 +185,7 @@ def preprocessing_data(df):
     df = replace_none_activetime_with_average(df)
     end = timer()
     print("The time that went by for replace none with average: ", end-start, "seconds")
-
+    
     return df
 
 def find_documents_in_common(userId_1, userId_2):
