@@ -60,27 +60,16 @@ def train_test_split(ratings, fraction=0.2):
 
 def remove_all_none_values(df):
     '''
-        Basically removing 66% of the dataset..
+        Basically removing 2/3 of the dataset....
     '''
-    amount_before = df.shape[0]
 
+    amount_before = df.shape[0]
     df = df[df['eventId'].notnull()]
-    
     df = df[df['documentId'].notnull()]
     df = df[df['userId'].notnull()]
+    amount_after = df.shape[0] 
+    print("The amount of the dataset that was discarded: ", str(100 - int((amount_after/amount_before)*100)), "%")
 
-    #df = df[df['category'].notnull()]
-    #df = df[df['activeTime'].notnull()]
-    #df = df[df['title'].notnull()]
-    #df = df[df['url'].notnull()]
-    #df = df[df['publishtime'].notnull()]
-    #df = df[df['time'].notnull()]
-
-    amount_after = df.shape[0]    
-
-    amount_precantege_left_with = int((amount_after/amount_before)*100)
-    amount_removed_precentage = 100 - amount_precantege_left_with
-    print("The amount of the dataset that was discarded: ", amount_removed_precentage, "%")
     return df
 
 def replace_NaN_w_0(df, column=False):
@@ -98,20 +87,20 @@ def centered_cosine(df):
         2. Subtract that mean from all individual activeTime divided by the total number of activeTime by the user.
         3. For all the activeTimes where there is no time(NaN), we replace it with 0.
     '''
-
     # We create view a list of all mean of activetimes that a user had. We then loop on that list by userId.
     #   userId:                                            mean_of_that_user:
     #  'cx:10k2wzm1b3jsk2y5ym1utnjo97:2kefzqaxe9jx7'        13.75
     #  'cx:11asuyo07mbi13b849lp87hlje:1i9z1hu1xx694'        75.85714285714286
     #   ...                                                 ...
     for userId, mean_of_that_user in df.groupby(['userId']).activeTime.mean().iteritems():
+        mean_of_that_user = round(mean_of_that_user, 2)
         # Access each individual activeTime of a specific userId
         activeTimeS = df.loc[df.userId == userId, ['activeTime']]
 
         # Loop on all activitimes of the specific userId, updates its activeTime
         for i in range(len(activeTimeS)):
             if activeTimeS.iloc[i].notna().bool() == True: # NaN check
-               activeTimeS.iloc[i] = round(float(activeTimeS.iloc[i] - round(mean_of_that_user, 2)), 2)
+               activeTimeS.iloc[i] = round(activeTimeS.iloc[i] - mean_of_that_user, 2)
             else: 
                 activeTimeS.iloc[i] = 0.0         
         df.loc[df.userId == userId, ['activeTime']] = activeTimeS
@@ -133,7 +122,6 @@ def replace_none_activetime_with_average(df):
     # Find all documentIds with activeTime == None/NaN/null/whatever
     for docuId in documentIds_null['documentId']:
         # Find all activeTimes of the first documentId==None. NB Here it is important that we find only real values
-        # therefore the "..notnull()"
         new_documentIds_value = documentIds_value[documentIds_value.documentId == docuId].activeTime
         
         document_list_sum = int(new_documentIds_value.sum())
@@ -146,25 +134,16 @@ def replace_none_activetime_with_average(df):
         
     df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
     
-    #df = centered_cosine(df)
-    #temp_data = df[['documentId','activeTime', 'userId']]
-
-    #print(temp_data)
-
-    df.to_csv('df_with_average_activetime.csv', index=False)
+    df.to_csv('df_with_average_activetime_kkkk.csv', index=False)
 
     #new_df = pd.DataFrame(documentIds_null) 
-
     #for id, chunk in enumerate(np.array_split(new_df, 4)): 
     #    chunk.to_csv(f'new_df_avg_activetime_{id}.csv', index=False) 
 
     return df
 
 def preprocessing_data(df):
-    
 
-    #df = remove_all_none_values(df)
-    print(df.dtypes  )
     df = df[df['eventId'].notnull()]
     df = df[df['documentId'].notnull()]
     df = df[df['userId'].notnull()]
@@ -175,17 +154,6 @@ def preprocessing_data(df):
     df['time'] = converte_seconds_to_date_format(df, column='time')
     df['publishtime'] = converte_seconds_to_date_format(df, column='publishtime')
 
-
-    #TODO: strings are treated as integers or visa versa
-    #print(df['url'].head())
-    #dataProcessing = dataUtils.DataUtils()
-    #df['url'] = dataProcessing.filter_data(df)
-
-    start = timer()
-    df = replace_none_activetime_with_average(df)
-    end = timer()
-    print("The time that went by for replace none with average: ", end-start, "seconds")
-    
     return df
 
 def find_documents_in_common(userId_1, userId_2):
@@ -210,95 +178,52 @@ def cosine_similiarity(df):
         sim(A, B) = Ai * Bi / sqrt( Ai ^2 ) * sqrt( Bi ^2 )
     '''
     similarity_dataFrame = pd.DataFrame(columns=df['userId'])
+    users_unique = df['userId'].unique()
+    nr_users = len(users_unique)
 
-    for userId_1 in df['userId'].unique():
-        cosine_sim_list = []
-        userId_2_list = []
-        sim_dict = {}
-        #table consist of activeTime and documentId so we keep track of which documents we are comparing.
-        #user1_table = df.loc[df.userId == userId_1, ['activeTime','documentId']]
-
-        for userId_2 in df['userId'].unique(): # The next user we want to loop on
-            
-            # iloc allows us to loop on the list
-            #user2_table = df.loc[df.userId == userId_2, ['activeTime', 'documentId']]
-        
+    sim_matrix = np.zeros((nr_users, nr_users), float)
+    print("similarity..")
+    for userId_1 in users_unique:
+        for userId_2 in users_unique:
             if userId_1 == userId_2:
                 pass #same user so skip
             elif find_documents_in_common(userId_1, userId_2):
-                common_docs = find_documents_in_common(userId_1, userId_2)
+
                 user1_table = df.loc[df.userId == userId_1, ['activeTime','documentId']]
                 user2_table = df.loc[df.userId == userId_2, ['activeTime', 'documentId']]
-                #print("user1_table: \n", user1_table)
-                #print("user2_table: \n", user2_table)
-
-                
-                #for docs in find_documents_in_common(userId_1, userId_2):
-                #user1_table = df.loc[(df.userId == userId_1) & (df.documentId == docs), ['activeTime','documentId']]
-                #user2_table = df.loc[(df.userId == userId_2) & (df.documentId == docs), ['activeTime','documentId']]
-
-                # TODO:
-                # need to do a check on documentIds
-                # If they dont share documentId's then skip
-                # activete = None --> average av alle som har sett på den artikkel.
 
                 # User1's activeTime1 * User2's activeTime1 aka "dot product" of user1 and user2
                 multiply_user1_user2 = [x*y for x, y, in zip(user1_table['activeTime'], user2_table['activeTime'])]
                 multiply_user1_user2 = sum(multiply_user1_user2)
+
+                # we need to check here incase sum(activities) will yield 0 allthough they are not wrong/missing.
+                # e.g. activeTime = 10 and activeTime = -10 will yield sum() == 0
+                if multiply_user1_user2 == 0:
+                    #print("user1_table: \n", user1_table)
+                    #print("user1_table: \n", user2_table)
+                    #print("welcome")
+                    continue
+
                 multiply_user1_user2 = round(multiply_user1_user2, 2)
+
                 # user1's activeTime1^2  
                 user1_square_sum = round(sum( [np.square(x) for x in user1_table['activeTime'] if x != 0.0] ), 2) 
                 
                 user2_square_sum = round(sum( [np.square(x) for x in user2_table['activeTime'] if x != 0.0] ), 2) 
+
                 
                 #check that multiply_user1_user2 are actually a int list and gets a correct sum
                                 #sum dot product        /   squareRoot(user1's activeTime^2) * quareRoot(user2's activeTime^2)
                 temp_user1 = round(np.sqrt(user1_square_sum), 4)
                 temp_user2 = round(np.sqrt(user2_square_sum), 4)
                 temp_user1_w_user2 = temp_user1 * temp_user2
-                cosine_sim_2 = round((multiply_user1_user2 / temp_user1_w_user2), 4)
 
-                cosine_sim = round (multiply_user1_user2 /  round(np.sqrt(user1_square_sum), 4) * round( np.sqrt(user2_square_sum),4), 2)
+                cosine_sim = round((multiply_user1_user2 / temp_user1_w_user2), 4)
 
-                #cosine_sim_list.append({)
-
-                cosine_sim_list.append(str(cosine_sim_2))
-                userId_2_list.append(str(userId_2)) 
-                    
-                df['cosineSim_activeTime'] =  str(cosine_sim_2) + "|" + str(userId_1) + " compared to " + str(userId_2)
-
-            else: # They are not sharing any documents in common, therefore they are similar with 0.
-                cosine_sim_list.append(str(0))
-                userId_2_list.append(str(userId_2))    
-
-        #TODO: Build the dataframe
-        #TODO: need to find another way
-
-        #similarity_dataFrame.insert(loc=len(similarity_dataFrame.index))
-        
-        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str(userId_1), value=cosine_sim_list)
-        print(
-            similarity_dataFrame.head()
-        )
-        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str("User: " + str(userId_1) + "compared_to"), value=userId_2_list)
+                sim_matrix[ int(userId_1) ] [ int(userId_2) ] += cosine_sim
 
 
-        #for i in len(userId_2_list):
-        #    similarity_dataFrame.loc[i]
-
-        #similarity_dataFrame.assign()
-        #similarity_dataFrame = pd.DataFrame(cosine_sim_list, columns=userId_2_list, index=str(userId_1))
-
-        #similarity_dataFrame[str("user: " + str(userId_1) + " similarity")] = cosine_sim_list
-        #similarity_dataFrame[str(userId_1)] = cosine_sim_list
-        #similarity_dataFrame[str(str(userId_1) + "_users_compared_to")] = userId_2_list
-        #similarity_dataFrame.insert(loc=len(similarity_dataFrame.columns), column=str(userId_1), value=cosine_sim_list)
-        #similarity_dataFrame.insert(loc=len(similarity_dataFrame.columns), column=str(userId_1 + " users"), value=userId_2_list)
-        print(
-            similarity_dataFrame.head()
-        )
-            
-    return df, similarity_dataFrame
+    return sim_matrix
                 
 def converte_seconds_to_date_format(df, column):
     '''
@@ -344,48 +269,56 @@ def print_statistics(df):
         "total unique documents in the system: ", str(len(df['documentId'].unique()) - 1), "\n", # - 1 because of None
     )
 
+def save_matrix_to_file_numpy_txt(matrix):
+    with open('sim_matrix.txt') as f:
+        for line in matrix:
+            np.savetxt(f, line, fmt='%.2f')
+
+def save_matrix_to_file_pandas_csv(matrix):
+    df = pd.DataFrame(data=matrix.astype(float))
+    df.to_csv('outfile.csv', sep=' ', header=False, float_format='%.2f', index=False)
+
+def load_matrix_from_file_numpy_txt(filename, number_of_columns):
+    matrix = np.loadtxt(str(filename), usecols=range(number_of_columns))
+    return matrix
 if __name__ == '__main__':
-    df = load_data("active1000")
-    #df = load_one_file('active1000/20170101')
+    #df = load_data("active1000")
+    df = load_one_file('active1000/20170101')
     #new_df = pd.read_csv('df_with_average_activetime.csv')
-
-    start = timer()
-    df = replace_none_activetime_with_average(df)
-    end = timer()
-
-
-    #import project_example as pe
-    #pe.statistics(df)
-    #print("***********************************************************")
-    #pe.statistics(new_df)
-
-    # TODO:
-    # Focus on category after activetime
-    # er ikke nødvendig å se på atributter av artikkler, når de skal
-
-
+    #df = pd.read_csv('df_with_average_activetime.csv')
 
     print_statistics(df)    
     print(df.head())
-
     df = preprocessing_data(df)
 
+    #start = timer()
+    #df = replace_none_activetime_with_average(df)
+    #end = timer()
+    #print("The time that went by for replace None with average: ", end-start, "seconds")
 
     start = timer()
     df = centered_cosine(df)
     end = timer()
     print("The time that went by for centered_cosine: ", end-start, "seconds")
 
-    # SIMILIARITY CHECK --
     start = timer()
-    df, similarity_dataFrame = cosine_similiarity(df)
+    sim_matrix = cosine_similiarity(df)
     end = timer()
-    
     print("The time that went by for similarity comparison: ", end-start, "seconds")
-    print(df.head())
-    print("**********************************")
-    print(similarity_dataFrame.head() )
+    
+    save_matrix_to_file_numpy_txt(sim_matrix)
+    
+    load_matrix_from_file_numpy_txt('sim_matrix.txt', 3)
 
+    print(df.head())
+    
+    #TODO:
+    # We want to find a Neighborhood aka a set of users who are most similar to target user
+    # Everyone in that neighborhood must have rated the same documentId that we are considering for the target user
+    # - Let Rx be a vector of user X's ratings
+    # - Let N be the set of k users most similar to X, who have also rated item i
+    # - Option 1: take an average of the neighborhoods rating of item i and that will be the rating for X to item i.
+    # - Option 2: Weighted average of neighboorhood, 
 
 
 
@@ -394,6 +327,43 @@ if __name__ == '__main__':
 
 
     '''
+
+    **************************************************************************************************
+
+                #cosine_sim_list.append(str(cosine_sim))
+                #userId_2_list.append(str(userId_2)) 
+                    
+                #df['cosineSim_activeTime'] =  str(cosine_sim) + "|" + str(userId_1) + " compared to " + str(userId_2)
+
+            else: # They are not sharing any documents in common, therefore they are similar with 0.
+                
+                #cosine_sim_list.append(str(0))
+                #userId_2_list.append(str(userId_2))    
+
+        #TODO: Build the dataframe
+        #TODO: need to find another way
+
+
+
+
+
+
+        #similarity_dataFrame.insert(loc=len(similarity_dataFrame.index))
+
+        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str(userId_1), value=cosine_sim_list)
+        print(
+            similarity_dataFrame.head()
+        )
+        similarity_dataFrame.insert(loc=len(similarity_dataFrame.index), column=str("User: " + str(userId_1) + "compared_to"), value=userId_2_list)
+
+        print(
+            similarity_dataFrame.head()
+        )
+
+
+
+
+    ********************************************************************************************************************************************
 
         #dataUtils = dataUtils.DataUtils()
     #print(df.head())   
