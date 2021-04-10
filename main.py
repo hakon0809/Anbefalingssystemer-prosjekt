@@ -10,34 +10,11 @@ from dataAggregator import DataAggregator
 from baselines import MostPopularRecommender, MostRecentRecommender, MeanScoreRecommender
 from evalMethods import evaluate_recall, evaluate_arhr, evaluate_mse
 
-# def statistics(df):
-#     """
-#         Basic statistics based on loaded dataframe
-#     """
-#     total_num = df.shape[0]
-    
-#     print(f"Total number of events(front page incl.): {total_num}")
-#     df.sort_values(by=['userId', 'time'], ascending=True, inplace=True)
-#     df_ref = df[df['documentId'].notnull()]
-#     num_act = df_ref.shape[0]
-    
-#     print(f"Total number of events(without front page): {num_act}")
-#     num_docs = df_ref['documentId'].nunique()
-    
-#     print(f"Total number of documents: {num_docs}")
-#     print('Sparsity: {:4.3f}%'.format(float(num_act) / float(1000*num_docs) * 100))
-#     df_ref.drop_duplicates(subset=['userId', 'documentId'], inplace=True)
-#     print(f"Total number of events(drop duplicates): {df_ref.shape[0]}")
-#     print('Sparsity (drop duplicates): {:4.3f}%'.format(float(df_ref.shape[0]) / float(1000*num_docs) * 100))
-    
-#     user_df = df_ref.groupby(['userId']).size().reset_index(name='counts')
-#     print("Describe by user:")
-#     print(user_df.describe())
 
 if __name__ == '__main__':
     dataHelper = DataUtils()
     print("loading data...")
-    entries = dataHelper.load_data("active1000", num=10) # num is number of files, omit to load all
+    entries = dataHelper.load_data("active1000", num=0) # num is number of files, omit or 0 to load all
     numLoaded = len(entries)
     print(f"loaded {numLoaded} events.")
 
@@ -61,32 +38,36 @@ if __name__ == '__main__':
     print("data processed.")    
 
     # Generate train-test split
+    print("performing train-test split")
     train, test = sklearn.model_selection.train_test_split(events, test_size=0.2, shuffle=False)
     nTest = len(test.index)
     nTrain = len(train.index)
-    print(f"Training on {nTrain} events...")
 
-    # pass just train set to aggregator
-    agg = DataAggregator(categories)
-    agg.generateArticleData(train, dataHelper.nextDocumentID)
-    agg.generateUserData(train, dataHelper.nextUserID)
-    print("Training complete.")
-
-    # Initialize the recommenders on the aggregated train data
-    # TODO: Add other recommenders here
-    meanScore = MeanScoreRecommender(agg.articles, agg.users)
-    mostRecent = MostRecentRecommender(agg.articles)
-    mostPopular = MostPopularRecommender(agg.articles)
-    
     # Find the train-test split time, and fetch all articles published after that time
     splitTime = train.iloc[-1]["eventTime"] # get the time of the last event in the train set
         # TODO: add a margin, include articles from the same day or week
+    splitEventId = train.iloc[-1]["eventId"]
     nTrainArticles = test["documentId"].min()
     nArticles = dataHelper.nextDocumentID - nTrainArticles # number of articles from start of test to end
     #print(newArticles[0], nArticles, newArticles[len(newArticles)-1])
         # the problem here arises because articles are re-indexed by the eventTime of their first interaction, not their publishing time
         # so article 100 may be published after splitTime, while 101 was published before, just because 100 was clicked by someone sooner
     nUsers = dataHelper.nextUserID
+
+
+    # pass just train set to aggregator
+    print(f"Training on {nTrain} events...")
+    agg = DataAggregator(categories)
+    agg.generateArticleData(train, dataHelper.nextDocumentID)
+    agg.generateUserData(train, dataHelper.nextUserID)
+    print("Training complete.")
+
+    # Initialize the recommenders on the aggregated train data
+    # TODO: Add other recommenders here, perform training here
+
+    meanScore = MeanScoreRecommender(agg.articles, agg.users)
+    mostRecent = MostRecentRecommender(agg.articles)
+    mostPopular = MostPopularRecommender(agg.articles, splitEventId)
 
     print(f"Testing on {nTest} events, tracking score for {nArticles} articles...")
 
@@ -139,9 +120,13 @@ if __name__ == '__main__':
         # TODO: Add other recommenders here
 
         for recommender, predictions in clickPairs:
-            predictions.append(recommender.predictNextClick(event["userId"], event["eventTime"]))
+            predictions.append(recommender.predictNextClick(event["userId"], event["eventTime"], k=10))
 
         agg.add_event(event) # update our trained data with the new event to improve future predictions
+        # TODO: Add other recommenders here
+
+        mostPopular.add_event(event)
+
         if relativeEventId % 2000 == 0: print('.',end='') # progressbar of sorts
     print('.')
     print("Done")

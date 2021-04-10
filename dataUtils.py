@@ -12,6 +12,8 @@ class DataUtils:
         self.nextUserID = 0
         self.knownDocumentIDs = {}
         self.nextDocumentID = 0
+        #self.knownEventIDs = {}
+        #self.nextEventID = 0
 
     def load_data(self, path, num=0):
         data=[]
@@ -37,8 +39,11 @@ class DataUtils:
 
     def index_data(self, entries):
         indexed = []
-        for entry in entries:
+        for i, entry in enumerate(entries):
             indexedEntry = entry.copy()
+            indexedEntry["eventId"] = i
+            #self.knownEventIDs[entry["eventId"]] = i
+            #self.nextEventID = i + 1
 
             # Get UUID, find its sequential user ID (create new if not found)
             originalUserId = entry["userId"]

@@ -17,10 +17,12 @@ class DataAggregator:
             # If we encounter an article with no events, it means we've moved past the train set and into articles that haven't been
             # published yet. Break the loop early and avoid trying to process null data.
             if (len(articleEvents.index) == 0):
-                continue #TODO break vs continue
+                break
 
             data["documentId"] = id
             data["publishtime"] = articleEvents["publishtime"].mode().max().item() # looks if any event has publishtime
+            data["firstEventId"] = articleEvents["eventId"].min()
+            data["firstEventTime"] = articleEvents.loc[data["firstEventId"]]["eventTime"]
             # TODO: "firstEventTime" that overrides publishtime when publishtime is unavailable
             categoryMode = articleEvents["categories"].mode() # looks if any event has categories (mode is most common value except None)
             data["categories"] = categoryMode.item() if not categoryMode.empty else None # (if no event has category, save it as None)
@@ -46,7 +48,7 @@ class DataAggregator:
             # Same as above: if we encounter an article with no events, it means we've moved past the train set and into users who
             # haven't shown up yet. Break the loop early and avoid trying to process null data.
             if (len(userEvents.index) == 0):
-                continue
+                break
 
             categoriesSlice = userEvents["categories"].dropna()
             data["userId"] = id
@@ -89,6 +91,8 @@ class DataAggregator:
             data = {}
             data["documentId"] = articleId
             data["publishtime"] = event["publishtime"] if event["publishtime"] is not None else event["eventTime"] # TODO: do elsewhere
+            data["firstEventId"] = event["eventId"]
+            data["firstEventTime"] = event["eventTime"]
             data["categories"] = event["categories"]
             data["events"] = 1
             data["activeEvents"] = 1 if hasActiveTime else 0
