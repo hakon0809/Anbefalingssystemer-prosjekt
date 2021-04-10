@@ -308,7 +308,7 @@ if __name__ == '__main__':
     
     save_matrix_to_file_numpy_txt(sim_matrix)
     
-    load_matrix_from_file_numpy_txt('sim_matrix.txt', 3)
+    #load_matrix_from_file_numpy_txt('sim_matrix.txt', 3)
 
     print(df.head())
     
