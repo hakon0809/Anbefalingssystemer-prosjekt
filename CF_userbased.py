@@ -347,7 +347,17 @@ def print_statistics(df):
 if __name__ == '__main__':
     df = load_data("active1000")
     #df = load_one_file('active1000/20170101')
-    #df = pd.read_csv('df_with_average_activetime.csv')
+    #new_df = pd.read_csv('df_with_average_activetime.csv')
+
+    start = timer()
+    df = replace_none_activetime_with_average(df)
+    end = timer()
+
+
+    #import project_example as pe
+    #pe.statistics(df)
+    #print("***********************************************************")
+    #pe.statistics(new_df)
 
     # TODO:
     # Focus on category after activetime
