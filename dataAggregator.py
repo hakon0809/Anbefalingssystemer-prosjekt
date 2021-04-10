@@ -29,11 +29,7 @@ class DataAggregator:
             data["events"] = articleEvents["eventId"].count() # number of events involving this article
             data["activeEvents"] = articleEvents["activeTime"].count() # number of events with registered active time
             data["totalActiveTime"] = articleEvents["activeTime"].sum(skipna=True) # total active time registered on this article
-            '''
-            activeTime = data["totalActiveTime"]
-            numEvents = data["activeEvents"]
-            data["averageActiveTime"] = 0 if numEvents == 0 else activeTime / numEvents
-            '''
+            
             articleList.append(data)
         df = pd.DataFrame(articleList).set_index("documentId") # turn list of dicts into dataframe
         df["averageActiveTime"] = df["totalActiveTime"] / df["activeEvents"] # calculate the average active time for each article (excluding events with no active time)

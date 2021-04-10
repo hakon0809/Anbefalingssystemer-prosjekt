@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import sklearn.model_selection
 import sklearn.preprocessing
+import threading
 
 from tabulate import tabulate
 
@@ -12,9 +13,12 @@ from evalMethods import evaluate_recall, evaluate_arhr, evaluate_mse
 
 
 if __name__ == '__main__':
+    DATANUM = 0 # number of files, 0 to load all
+    K = 10
+
     dataHelper = DataUtils()
     print("loading data...")
-    entries = dataHelper.load_data("active1000", num=0) # num is number of files, omit or 0 to load all
+    entries = dataHelper.load_data("active1000", num=DATANUM) 
     numLoaded = len(entries)
     print(f"loaded {numLoaded} events.")
 
@@ -47,26 +51,33 @@ if __name__ == '__main__':
     splitTime = train.iloc[-1]["eventTime"] # get the time of the last event in the train set
         # TODO: add a margin, include articles from the same day or week
     splitEventId = train.iloc[-1]["eventId"]
-    nTrainArticles = test["documentId"].min()
-    nArticles = dataHelper.nextDocumentID - nTrainArticles # number of articles from start of test to end
-    #print(newArticles[0], nArticles, newArticles[len(newArticles)-1])
-        # the problem here arises because articles are re-indexed by the eventTime of their first interaction, not their publishing time
-        # so article 100 may be published after splitTime, while 101 was published before, just because 100 was clicked by someone sooner
+    nTrainArticles = train["documentId"].max()
+    firstRelevantArticleId = max(test["documentId"].min(), int(nTrainArticles * 0.95))
+        # ^ the max() here ensures we DO cut off SOME articles, and assumes that
+        # no more than at most the 5% most recent articles (up to ~1k for the full dataset)
+        # from before the split are relevant 
+    nArticles = dataHelper.nextDocumentID - firstRelevantArticleId
+        # number of articles from start of test to end (including some from before the split) 
     nUsers = dataHelper.nextUserID
 
 
     # pass just train set to aggregator
     print(f"Training on {nTrain} events...")
     agg = DataAggregator(categories)
-    agg.generateArticleData(train, dataHelper.nextDocumentID)
-    agg.generateUserData(train, dataHelper.nextUserID)
-    print("Training complete.")
+    articleThread = threading.Thread(target=agg.generateArticleData(train, dataHelper.nextDocumentID))
+    userThread = threading.Thread(target=agg.generateUserData(train, dataHelper.nextUserID))
+
+    articleThread.start()
+    userThread.start()
+
+    articleThread.join()
+    userThread.join()
 
     # Initialize the recommenders on the aggregated train data
     # TODO: Add other recommenders here, perform training here
 
     meanScore = MeanScoreRecommender(agg.articles, agg.users)
-    mostRecent = MostRecentRecommender(agg.articles)
+    mostRecent = MostRecentRecommender(agg.articles, K)
     mostPopular = MostPopularRecommender(agg.articles, splitEventId)
 
     print(f"Testing on {nTest} events, tracking score for {nArticles} articles...")
@@ -96,7 +107,7 @@ if __name__ == '__main__':
 
     for eventId, event in test.iterrows():
         relativeEventId = eventId - nTrain # index in the recall-predictions/recommendations
-        relativeArticleId = event["documentId"] - nTrainArticles # index in the score-predictions
+        relativeArticleId = event["documentId"] - firstRelevantArticleId # index in the score-predictions
 
         # Evaluate scores (activetime)
         if not (relativeArticleId < nArticles):
@@ -120,14 +131,16 @@ if __name__ == '__main__':
         # TODO: Add other recommenders here
 
         for recommender, predictions in clickPairs:
-            predictions.append(recommender.predictNextClick(event["userId"], event["eventTime"], k=10))
+            predictions.append(recommender.predictNextClick(event["userId"], event["eventTime"], k=K))
 
         agg.add_event(event) # update our trained data with the new event to improve future predictions
         # TODO: Add other recommenders here
 
         mostPopular.add_event(event)
+        mostRecent.add_event(event)
 
-        if relativeEventId % 2000 == 0: print('.',end='') # progressbar of sorts
+        if relativeEventId % 2000 == 0 and not relativeEventId == 0:
+            print('.',end='',flush=True) # progressbar of sorts
     print('.')
     print("Done")
     
