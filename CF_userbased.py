@@ -148,6 +148,13 @@ def preprocessing_data(df):
     df = df[df['documentId'].notnull()]
     df = df[df['userId'].notnull()]
 
+    data_preprocessing = dataUtils.DataUtils()
+
+    url_list = df['url'].tolist()
+
+    df['url'] = data_preprocessing.filter_data(url_list)
+
+
     df['userId'] = pd.factorize(df['userId'])[0]
     df['documentId'] = pd.factorize(df['documentId'])[0]
 
@@ -281,6 +288,8 @@ def save_matrix_to_file_pandas_csv(matrix):
 def load_matrix_from_file_numpy_txt(filename, number_of_columns):
     matrix = np.loadtxt(str(filename), usecols=range(number_of_columns))
     return matrix
+
+
 if __name__ == '__main__':
     df = load_data("active1000")
     #df = load_one_file('active1000/20170101')
@@ -290,6 +299,8 @@ if __name__ == '__main__':
     print_statistics(df)    
     print(df.head())
     df = preprocessing_data(df)
+    print_statistics(df)    
+    print(df.head())
 
     print("number of activeTimes that are none: ", df.loc[df.activeTime.isnull(), 'activeTime'])
     #print("number of activeTimes that are none: ", df.loc[df.activeTime.isnull(), 'activeTime']).value_counts(dropna=False)
