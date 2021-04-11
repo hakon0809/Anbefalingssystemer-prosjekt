@@ -282,8 +282,8 @@ def load_matrix_from_file_numpy_txt(filename, number_of_columns):
     matrix = np.loadtxt(str(filename), usecols=range(number_of_columns))
     return matrix
 if __name__ == '__main__':
-    #df = load_data("active1000")
-    df = load_one_file('active1000/20170101')
+    df = load_data("active1000")
+    #df = load_one_file('active1000/20170101')
     #new_df = pd.read_csv('df_with_average_activetime.csv')
     #df = pd.read_csv('df_with_average_activetime.csv')
 
@@ -291,10 +291,13 @@ if __name__ == '__main__':
     print(df.head())
     df = preprocessing_data(df)
 
-    #start = timer()
-    #df = replace_none_activetime_with_average(df)
-    #end = timer()
-    #print("The time that went by for replace None with average: ", end-start, "seconds")
+    print("number of activeTimes that are none: ", df.loc[df.activeTime.isnull(), 'activeTime'])
+    #print("number of activeTimes that are none: ", df.loc[df.activeTime.isnull(), 'activeTime']).value_counts(dropna=False)
+
+    start = timer()
+    df = replace_none_activetime_with_average(df)
+    end = timer()
+    print("The time that went by for replace None with average: ", end-start, "seconds")
 
     start = timer()
     df = centered_cosine(df)
