@@ -141,6 +141,7 @@ def build_content_based_word2vec_similarity_matrix(df):
     concatinated_matrix = np.asmatrix([np.concatenate(arrays) for arrays in padded_matrix])
 
     print('concatinated matrix shape' + str(concatinated_matrix.shape))
+    print(concatinated_matrix[0])
 
     #build similarity matrix for each titlecat row where the index [0][0] is the similarity of documentId with itself
     similarity_matrix = cosine_similarity(concatinated_matrix)
@@ -155,10 +156,13 @@ def build_rating_matrix(df):
     nr_documents = len(df['documentId'].drop_duplicates())
     rating_matrix = np.zeros((nr_users,nr_documents))
     #TODO NEEDS BETTER FIX
-    df['activeTime'] = df['activeTime'].fillna(65.0)
+    df['activeTime'] = df['activeTime'].fillna(0)
     #can be done faster using vectorization maybe
     for index, row in df.iterrows():
-            rating_matrix[int(row['userId']), int(row['documentId'])] += row['activeTime']
+        if rating_matrix[int(row['userId']), int(row['documentId'])] != 0:
+            rating_matrix[int(row['userId']), int(row['documentId'])] = (rating_matrix[int(row['userId']), int(row['documentId'])] + row['activeTime']) / 2
+        else:
+            rating_matrix[int(row['userId']), int(row['documentId'])] = row['activeTime']
 
 
     return rating_matrix
