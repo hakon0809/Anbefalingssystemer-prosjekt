@@ -115,21 +115,25 @@ def build_content_based_word2vec_similarity_matrix(df):
     
     # dictionary with vector values for each word
     vectors_dict = word_vec_model.wv
-    print(len(df['titlecat'].index))
-    # array of phrases from each titlecat row
-    phrase_array = df['titlecat'].to_numpy()
-    
     
     # convert each word in titlecat into their vector representation
     vectors_array = df['titlecat'].apply(lambda words: [vectors_dict[x] for x in words]).to_numpy()
 
     # max_len = max(len(row) for row in vectors_array) #max number of words in titlecats is 31
     # print(max_len)
+    # print((vectors_array[0]))
 
     # insert vectors into padded matrix
     padded_matrix = np.zeros((vectors_array.shape[0], 31, 100))
-    for enu, row in enumerate(vectors_array):
-        padded_matrix[enu, :len(row)] += row
+    # TODO think this for loop as well as the double for loop under does the same job, but more certain on the double forloop
+    # A possible reason why all rows are to some degree similar are the empty remainder of the 31 max len words for each row
+    # eg: 0 is similar to 0 
+    # for enu, row in enumerate(vectors_array):
+    #     padded_matrix[enu, :len(row)] += row
+
+    for x in range(vectors_array.shape[0]):
+        for y in range(len(vectors_array[x])):
+            padded_matrix[x,y,:100] = vectors_array[x][y]
 
     print('padded matrix shape: ' + str(padded_matrix.shape))
 
@@ -140,7 +144,7 @@ def build_content_based_word2vec_similarity_matrix(df):
 
     #build similarity matrix for each titlecat row where the index [0][0] is the similarity of documentId with itself
     similarity_matrix = cosine_similarity(concatinated_matrix)
-    # print(similarity_matrix[:5,:5])
+    #print(similarity_matrix[:50,:50])
     print('similarity matrix shape: '+ str(similarity_matrix.shape))
     return similarity_matrix
 
@@ -332,10 +336,10 @@ def content_recommendation(rating_matrix, similarity_matrix):
 if __name__ == '__main__':
     # df = load_data('active1000')
     # df = load_data_test()
-    df = load_data_average()
-    # df = load_data_avg_test()
+    # df = load_data_average()
+    df = load_data_avg_test()
 
-    # df = remap_df(df)
+    df = remap_df(df) #dont do this when loading the entire set eg: load_data_average or load_data('active1000')
     similarity_matrix = build_content_based_word2vec_similarity_matrix(df)
     rating_matrix = build_rating_matrix(df)
     pred, actual = predict_active_time(df, similarity_matrix, rating_matrix)
