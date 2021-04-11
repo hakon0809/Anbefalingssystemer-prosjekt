@@ -1,5 +1,9 @@
 desktop.ini
 active1000/
+testfile.csv
 testfileavg.csv
 df_with_average_activetime.csv
 __pycache__/
+df_with_average_activetime.csv
+testfileavg.csv
+.vscode

@@ -225,10 +225,10 @@ def cosine_similiarity(df):
                 temp_user2 = round(np.sqrt(user2_square_sum), 4)
                 temp_user1_w_user2 = temp_user1 * temp_user2
 
+
                 cosine_sim = round((multiply_user1_user2 / temp_user1_w_user2), 4)
 
                 sim_matrix[ int(userId_1) ] [ int(userId_2) ] += cosine_sim
-
 
     return sim_matrix
                 
@@ -356,9 +356,6 @@ if __name__ == '__main__':
 
         #TODO: Build the dataframe
         #TODO: need to find another way
-
-
-
 
 
 
