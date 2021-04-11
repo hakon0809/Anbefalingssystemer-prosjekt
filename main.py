@@ -5,6 +5,7 @@ import sklearn.preprocessing
 import threading
 
 from tabulate import tabulate
+from timeit import default_timer as timer
 
 from dataUtils import DataUtils
 from dataAggregator import DataAggregator
@@ -13,7 +14,7 @@ from evalMethods import evaluate_recall, evaluate_arhr, evaluate_mse
 
 
 if __name__ == '__main__':
-    DATANUM = 0 # number of files, 0 to load all
+    DATANUM = 9 # number of files, 0 to load all
     K = 10
 
     dataHelper = DataUtils()
@@ -28,13 +29,23 @@ if __name__ == '__main__':
     numLost = numLoaded - len(filtered_data)
     print(f"filtered to {len(filtered_data)} events. {numLost} events ({numLost / numLoaded:%}) discarded.")
 
-    # Re-index document and user IDs to start at 0 and be sequential
+    # Re-index document and user IDs to start at 0 and be sequential, manually
     print("re-indexing data...")
+    startTime = timer()
     indexed_data = dataHelper.index_data(filtered_data)
-    print("indexed.")
+    endTime = timer()
+    print(f"indexed in {endTime - startTime} seconds.")
 
     # Convert indexed data to a dataframe
     raw_events = dataHelper.get_dataframe(indexed_data)
+
+    # Re-index document and user IDs to start at 0 and be sequential, via factorize
+    # half the time (2 seconds instead of 4) but doesnt keep a map back to the original documents/users
+    # print("re-indexing data...")
+    # startTime = timer()
+    # raw_events = dataHelper.factorize_data(raw_events)
+    # endTime = timer()
+    # print(f"indexed in {endTime - startTime} seconds.")
 
     # Fix dates, clean up categories, and populate missing data (eventually)
     print("processing data...")
@@ -61,8 +72,8 @@ if __name__ == '__main__':
     nUsers = dataHelper.nextUserID
 
 
-    # pass just train set to aggregator
-    print(f"Training on {nTrain} events...")
+    # Pass just train set to aggregator
+    print(f"Aggregating event data over {nTrain} events...")
     agg = DataAggregator(categories)
     articleThread = threading.Thread(target=agg.generateArticleData(train, dataHelper.nextDocumentID))
     userThread = threading.Thread(target=agg.generateUserData(train, dataHelper.nextUserID))
@@ -73,7 +84,12 @@ if __name__ == '__main__':
     articleThread.join()
     userThread.join()
 
+    # Fill in missing data (in new columns)
+    print(f"Filling in missing data...")
+    train = dataHelper.fill_missing(train, agg.articles, agg.users)
+
     # Initialize the recommenders on the aggregated train data
+    print(f"Training on {nTrain} events...")
     # TODO: Add other recommenders here, perform training here
 
     meanScore = MeanScoreRecommender(agg.articles, agg.users)
@@ -89,23 +105,53 @@ if __name__ == '__main__':
         # activeTimeMask is only needed if recommenders fill out more data than needed
         # since we only evaluate per-event, all predictions and actual scores should be 0 here by default
 
+    # Initialize evaluation shorthands
+    msePairs = []
+    clickPairs = []
+    results = []
+
+    # Initialize each recommenders result data
+    meanScores = np.zeros((nUsers, nArticles)) # predicted scores per new article for each user, for testing MSE, for recommenders that implement predictScore
+    msePairs.append((meanScore, meanScores)) # add recommender + result array to a shorthand for looping
+    #clickPairs.append() # mean score baseline does not predict clicks
+    results.append(("MeanScore", meanScores, None)) # add recommender + result array to results printout
+
+    mostRecentClicks = []
+    #msePairs.append() # most recent recommender does not predict scores
+    clickPairs.append((mostRecent, mostRecentClicks))
+    results.append(("MostRecent", None, mostRecentClicks))
+
+    mostPopularClicks = []
+    clickPairs.append((mostPopular, mostPopularClicks))
+    results.append(("MostPopular", None, mostPopularClicks))
+
+    # TODO: Add other recommenders here:
+
     # Initialize predicted scores per new article for each user, to test MSE, for recommenders that implement [???]
     # TODO: Add other recommenders here
-    meanScores = np.zeros((nUsers, nArticles))
+    #meanScores = np.zeros((nUsers, nArticles))
 
     # Initialize recommended articles per event, to test recall and ARHR, for recommenders that implement predictNextClick
     # TODO: Add other recommenders here
-    mostRecentClicks = []
-    mostPopularClicks = []
+    #mostRecentClicks = []
+    #mostPopularClicks = []
 
     # These are used to loop over evaluations
     # convenient for any recommenders that have the same format of
     # predictScore(user, article, time) for msePairs
     # predictNextClick(user, time) for clickPairs
-    msePairs = ((meanScore, meanScores),)
-    clickPairs = ((mostRecent, mostRecentClicks), (mostPopular, mostPopularClicks))
+    #msePairs = ((meanScore, meanScores),)
+    #clickPairs = ((mostRecent, mostRecentClicks), (mostPopular, mostPopularClicks))
+
+    #results = (
+    #    ("MostRecent", None, mostRecentClicks),
+    #    ("MostPopular", None, mostPopularClicks),
+    #    ("MeanScore", meanScores, None),
+    #)
 
     for eventId, event in test.iterrows():
+        event = dataHelper.fill_single_missing(event, agg.articles, agg.users)
+
         relativeEventId = eventId - nTrain # index in the recall-predictions/recommendations
         relativeArticleId = event["documentId"] - firstRelevantArticleId # index in the score-predictions
 
@@ -144,11 +190,6 @@ if __name__ == '__main__':
     print('.')
     print("Done")
     
-    results = (
-        ("MostRecent", None, mostRecentClicks),
-        ("MostPopular", None, mostPopularClicks),
-        ("MeanScore", meanScores, None),
-    )
     resultsTable = []
     for name, scores, clicks in results:
         recall = f"{evaluate_recall(clicks, actualClicks):6.4%}" if clicks is not None else "---"
