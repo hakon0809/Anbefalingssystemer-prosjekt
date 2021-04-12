@@ -19,6 +19,13 @@ from sklearn.model_selection import train_test_split as sk_train_test_split
 
 
 class UserBasedRecommender:
+    '''
+        Class that house all the functionality related to a user-basec recommender
+        the class holds onto all its variables, dataframes, matrixes and list so the class
+        is probably quite large object, but that how it ended up being anyways.
+        Remember to run start_recommender() to actually start anything.
+    '''
+
     def __init__(self) -> None:
         # data processing
         self.data_processing_class = 0
@@ -42,17 +49,22 @@ class UserBasedRecommender:
         self.nr_test_articles = 0
 
         # Data generate rating and sim matrix's
-        self.rating_matrix = 0
-        self.sim_matrix = 0
-        self.sim_pearson_correlation = 0
+        self.rating_matrix = np.zeros((self.nr_users, self.nr_articles))
+        self.sim_matrix = np.zeros((self.nr_users, self.nr_users))
+        self.sim_pearson_correlation = np.zeros((self.nr_users, self.nr_users))
     
-    def start_recommender(self, number_of_files_loaded=False):
+    def start_recommender(self, number_of_files_loaded):
 
-        self.data_processing()
+        self.data_processing(number_of_files_loaded)
         self.data_generating()
-        self.data_generate_rating_sim_matrix(number_of_files_loaded)
+        self.data_generate_rating_sim_matrix()
 
     def new_replace_none_w_average(self, df):
+        '''
+            replacing ac = None with that avg activeTime in the dataset of eventIds with 
+            same documentId and a valid do
+             divided on total events
+        '''
         documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
 
         for _, row  in documentIds_null.iterrows():
@@ -90,7 +102,7 @@ class UserBasedRecommender:
         else:
             return 0
 
-    def data_processing(self, number_of_files_loaded=False):
+    def data_processing(self, number_of_files_loaded):
         print("starting data processing...")
         self.data_processing_class = dataUtils.DataUtils()
         # Load data as a list
@@ -102,8 +114,8 @@ class UserBasedRecommender:
         # Returns a DataFrame based on the list
         self.df = self.data_processing_class.get_dataframe(list_of_indexed_data)
         # fix dates 
-        self.df['time'] = self.converte_seconds_to_date_format(self.df, column='time')
-        self.df['publishtime'] = self.converte_seconds_to_date_format(self.df, column='publishtime')
+        #self.df['time'] = self.converte_seconds_to_date_format(self.df, column='time')
+        #self.df['publishtime'] = self.converte_seconds_to_date_format(self.df, column='publishtime')
         # Clean up categorys and fix dates again
         self.events, self.categories = self.data_processing_class.process_data(self.df)
         print("done with data processing")
@@ -149,7 +161,7 @@ class UserBasedRecommender:
 
         self.df = self.new_replace_none_w_average(self.df)
 
-        #df = cosine_mean(df)
+        df = cosine_mean(self.df)
 
         self.aggregator.generateRatingMatrix(self.train, self.nr_users, self.nr_articles)
 
@@ -167,7 +179,83 @@ class UserBasedRecommender:
 
 
         return print("yo")
+    
+    def create_rating_matrix(self, df):
+        '''
+            Map activeTime per userId and documentId
+            x-axis = documentId
+            y-axis = userId
+            position(x)(y) = activetime
+        '''
+        rating_matrix = np.zeros((self.nr_users,self.nr_articles))
+        for _, event in df.iterrows():
+            rating_matrix[ int( event['userId'] ), int( event['documentId'] ) ] = event['activeTime']
 
+        return rating_matrix
+
+    def new_cosine_similarity(self, rating_matrix, df):
+        '''
+            Previosly method was to slow..
+            dot product of 2 arrays divided on absolute values of each array then
+            multiplied together results in a cosine_sim
+        '''
+        users_unique = df['userId'].unique()
+        nr_users = len(users_unique)
+        sim_matrix = np.zeros((nr_users, nr_users), float)
+        
+        for userId_1 in users_unique:
+            for userId_2 in users_unique:
+
+                array_1 = rating_matrix[userId_1]
+                array_2 = rating_matrix[userId_2]
+
+                sim_matrix[ int(userId_1) ] [ int(userId_2) ] = np.dot(array_1, array_2) / (norm(array_1) * norm(array_2))
+                    
+        return sim_matrix
+
+    def new_cosine_pearson_similarity(self, rating_matrix, df):
+        '''
+            Again my old def was to slow..
+            sane as cosine_sim, allthough the pearson correlation takes into consideration
+            the avrage mean, and mean-center the values of each array before doing 
+            cosine similarity.
+        '''
+        users_unique = df['userId'].unique()
+        nr_users = len(users_unique)
+        sim_matrix = np.zeros((nr_users, nr_users), float)
+        
+        for userId_1 in users_unique:
+            for userId_2 in users_unique:
+
+                array_1 = rating_matrix[userId_1]
+                array_2 = rating_matrix[userId_2]    
+
+                sim_matrix[ int(userId_1) ] [ int(userId_2) ] = np.corrcoef(array_1, array_2)[0][1]
+                    
+        return sim_matrix
+
+    def cosine_mean(self, df):
+
+        users_unique = df['userId'].unique()
+
+        print(df.head)
+        for userId in users_unique:
+            activeTimeS = df.loc[df.userId == userId, ['activeTime']]
+            #activeTimes_numeric = sum(activeTimeS['activeTime'].tolist())
+            user_average = sum(activeTimeS.astype(int)) / len(activeTimeS['activeTime'])
+            #user_average_2 = aggregator.users.at[userId, 'averageViewTime']
+            if np.isnan(user_average):
+                print("wtf...... whyt?")
+            temp = []
+            for _, row in activeTimeS.iterrows():
+                # activetime = row[0]
+                #temp.append(int(row[0] - user_average))
+                row[0] = (int(row[0]) - user_average)
+
+            df.loc[df.userId == userId, ['activeTime']] = activeTimeS
+        print(df.head)
+        
+        return df
 
 if __name__ == '__main__':
     start = timer()
