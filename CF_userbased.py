@@ -161,7 +161,7 @@ class UserBasedRecommender:
 
         self.df = self.new_replace_none_w_average(self.df)
 
-        df = cosine_mean(self.df)
+        #self.df = self.cosine_mean(self.df)
 
         self.aggregator.generateRatingMatrix(self.train, self.nr_users, self.nr_articles)
 
@@ -172,14 +172,6 @@ class UserBasedRecommender:
 
         print("done with data generate_sim_rating.")
 
-    def user_based_predictions(self, userId, documentId, time=None):
-        user_1 = userId
-        users_that_are_similar_to_user_1 = self.sim_matrix[userId].max()
-
-
-
-        return print("yo")
-    
     def create_rating_matrix(self, df):
         '''
             Map activeTime per userId and documentId
@@ -235,7 +227,10 @@ class UserBasedRecommender:
         return sim_matrix
 
     def cosine_mean(self, df):
-
+        '''
+            TODO: Fix this one, something is not right..
+            error error
+        '''
         users_unique = df['userId'].unique()
 
         print(df.head)
@@ -257,10 +252,19 @@ class UserBasedRecommender:
         
         return df
 
+    def user_based_predictions(self, userId, documentId, time=None):
+        user_1 = userId
+        users_that_are_similar_to_user_1 = self.sim_matrix[userId].max()
+
+
+
+        return print("yo")
+
+
 if __name__ == '__main__':
     start = timer()
     UsB_recommender = UserBasedRecommender()
-    UsB_recommender.start_recommender(number_of_files_loaded=1)
+    UsB_recommender.start_recommender(number_of_files_loaded=0)
     
     test = UsB_recommender.test
     for index, row in test.iterrows():
