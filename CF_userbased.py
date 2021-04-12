@@ -4,27 +4,199 @@ import os
 import json
 import numpy as np
 import pandas as pd
-import matplotlib as plt
 import concurrent.futures
 import dataUtils
-import sklearn
-
 
 from numpy import dot, nan
 from numpy.linalg import norm
 from timeit import default_timer as timer
 #from pandas._libs.tslibs import Timestamp
-from scipy import spatial
+#from scipy import spatial
 #from pandas.tseries.offsets import Second
 #from sklearn.metrics.pairwise import cosine_similarity as pairwise_cosine_similarity
 from sklearn.model_selection import train_test_split as sk_train_test_split
 
 
 
-def load_data(path):
-    """
-        Load events from files and convert to dataframe.
-    """
+class UserBasedRecommender:
+    def __init__(self) -> None:
+        # data processing
+        self.data_processing_class = 0
+        self.df = 0
+        self.events = 0
+        self.categories = 0
+
+        # Data generating
+        self.aggregator = 0
+
+        self.train = 0
+        self.test = 0
+        self.nr_tests = 0
+        self.nr_train = 0
+        self.nr_users = 0
+        self.nr_articles = 0
+        self.split_time = 0
+        self.split_eventId = 0
+        self.nr_train_articles = 0
+        self.first_relevant_article = 0
+        self.nr_test_articles = 0
+
+        # Data generate rating and sim matrix's
+        self.rating_matrix = 0
+        self.sim_matrix = 0
+        self.sim_pearson_correlation = 0
+    
+    def start_recommender(self, number_of_files_loaded=False):
+
+        self.data_processing()
+        self.data_generating()
+        self.data_generate_rating_sim_matrix(number_of_files_loaded)
+
+    def new_replace_none_w_average(self, df):
+        documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
+
+        for _, row  in documentIds_null.iterrows():
+            #documentId = row[0] #activeTime = row[1] #userId = row[2]
+            # go to the agregator class that hold the previously generated "helper data" acess correct column.
+            if np.isnan(row[1]):
+                documentIds_null.loc[documentIds_null.documentId == row[0], 'activeTime'] = self.aggregator.articles.at[row[0], "averageActiveTime"]
+            
+        df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
+    
+        return df
+        
+    def converte_seconds_to_date_format(self, df, column):
+        '''
+            Convert either unix-time from number of seconds since 1970 to a datetime format.
+            The function will also convert datetime format to not include timezone, and be formatted correctly.
+            Currently works on: publishtime and time. df must be a dataframe. column must be a string.
+            Example:
+            input: 1483225227
+            output: 2016-12-31 23:00:27
+            -------------------------------
+            input: 2017-01-01T16:51:55.000Z
+            output: 2017-01-01 16:51:55
+        '''
+        if column == 'time':
+            try:
+                return pd.to_datetime(df[str(column)], unit='s')
+            except:
+                print("Datetime conversion of seconds to date format failed..")
+        elif column == 'publishtime':
+            try: 
+                return pd.to_datetime(df[str(column)]).dt.tz_localize(None)
+            except:
+                print("Datetime conversion date to correct date format failed..")
+        else:
+            return 0
+
+    def data_processing(self, number_of_files_loaded=False):
+        print("starting data processing...")
+        self.data_processing_class = dataUtils.DataUtils()
+        # Load data as a list
+        list_of_data = self.data_processing_class.load_data("active1000", num=number_of_files_loaded)
+        # Filter the data
+        list_of_filtered_data = self.data_processing_class.filter_data(list_of_data)
+        # Inedx data with ints, docuemntId and userId
+        list_of_indexed_data = self.data_processing_class.index_data(list_of_filtered_data)
+        # Returns a DataFrame based on the list
+        self.df = self.data_processing_class.get_dataframe(list_of_indexed_data)
+        # fix dates 
+        self.df['time'] = self.converte_seconds_to_date_format(self.df, column='time')
+        self.df['publishtime'] = self.converte_seconds_to_date_format(self.df, column='publishtime')
+        # Clean up categorys and fix dates again
+        self.events, self.categories = self.data_processing_class.process_data(self.df)
+        print("done with data processing")
+
+    def data_generating(self):
+        '''
+            Generate helping data, or more data to have the calculations before needing them.
+            E.g. avrage-activeTime of a userId or a documentId.
+        '''
+        print("starting data generating...")
+
+        #Generate train-test split, to get helping data for the dataset.
+        self.train, self.test = sk_train_test_split(self.events, test_size=0.2, shuffle=False)
+        self.nr_tests = len(self.test.index)
+        self.nr_train = len(self.train.index)
+        self.nr_users = self.data_processing_class.nextUserID
+        self.nr_articles = self.data_processing_class.nextDocumentID
+
+        # want to find the time according to the dataset where the split between train and test
+        self.split_time = self.train.iloc[-1]["eventTime"]    # was performed.
+        self.split_eventId = self.train.iloc[-1]["eventId"]
+        self.nr_train_articles = self.train['documentId'].max()
+        self.first_relevant_article = max( self.test['documentId'].min(), int( self.nr_train_articles * 0.95))
+        # Cut most of the articles, and do the assumption that the last 5% articles are 
+        # the ones of relevance to us. This is the last 5 % of the train-set talking about.
+        self.nr_test_articles = self.nr_articles - self.first_relevant_article
+
+        # Sending in train set to aggregator.
+        self.aggregator = DataAggregator(categories=self.categories, strict=False)
+
+        # multithread to speed up processing.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.submit(self.aggregator.generateArticleData, self.train, self.nr_articles)
+            executor.submit(self.aggregator.generateUserData, self.train, self.nr_users)
+        
+        self.train = self.data_processing_class.fill_missing( self.train, self.aggregator.articles, self.aggregator.users)
+        print("done with data generating.")
+
+    def data_generate_rating_sim_matrix(self):
+        print("starting data generate_sim_rating...")
+
+        self.df = pd.DataFrame(self.train)
+
+        self.df = self.new_replace_none_w_average(self.df)
+
+        #df = cosine_mean(df)
+
+        self.aggregator.generateRatingMatrix(self.train, self.nr_users, self.nr_articles)
+
+        self.rating_matrix = self.aggregator.ratings
+        
+        self.sim_matrix = new_cosine_similarity(self.rating_matrix, self.df)
+        self.sim_pearson_correlation = new_cosine_pearson_similarity(self.rating_matrix, self.df)
+
+        print("done with data generate_sim_rating.")
+
+    def user_based_predictions(self, userId, documentId, time=None):
+        user_1 = userId
+        users_that_are_similar_to_user_1 = self.sim_matrix[userId].max()
+
+
+
+        return print("yo")
+
+
+if __name__ == '__main__':
+    start = timer()
+    UsB_recommender = UserBasedRecommender()
+    UsB_recommender.start_recommender(number_of_files_loaded=1)
+    
+    test = UsB_recommender.test
+    for index, row in test.iterrows():
+        print(row)
+
+    UsB_recommender.user_based_predictions( )
+    end = timer()
+    print("The time that went by for similarity comparison: ", end-start, "seconds")
+    print("we made it?")
+
+    #TODO:
+    # We want to find a Neighborhood aka a set of users who are most similar to target user
+    # Everyone in that neighborhood must have rated the same documentId that we are considering for the target user
+    # - Let Rx be a vector of user X's ratings
+    # - Let N be the set of k users most similar to X, who have also rated item i
+    # - Option 1: take an average of the neighborhoods rating of item i and that will be the rating for X to item i.
+    # - Option 2: Weighted average of neighboorhood, 
+
+
+    '''
+    def load_data(path):
+    
+    #    Load events from files and convert to dataframe.
+    
     map_lst=[]
     for f in os.listdir(path):
         file_name=os.path.join(path,f)
@@ -36,11 +208,11 @@ def load_data(path):
     return pd.DataFrame(map_lst)
 
 def load_one_file(path):
-    """
-        Less loading time with working on smaller dataset
-        Will always load file 20170101 or a specific file given by
-        path. Load events from files and convert to dataframe.
-    """
+    
+    #    Less loading time with working on smaller dataset
+    #    Will always load file 20170101 or a specific file given by
+    #    path. Load events from files and convert to dataframe.
+    
     map_lst=[]
     file_name=os.path.join(path)
     if os.path.isfile(file_name):
@@ -51,7 +223,7 @@ def load_one_file(path):
     return pd.DataFrame(map_lst) 
 
 def train_test_split(ratings, fraction=0.2):
-    """Leave out a fraction of dataset for test use"""
+    # Leave out a fraction of dataset for test use
     test = np.zeros(ratings.shape) # makes a empty matching list to ratings_table
     train = ratings.copy() # makes a copy of the rating_table
     for user in range(ratings.shape[0]): # Loop on the users in the ratings_table
@@ -65,9 +237,9 @@ def train_test_split(ratings, fraction=0.2):
     return train, test
 
 def remove_all_none_values(df):
-    '''
-        Basically removing 2/3 of the dataset....
-    '''
+    
+        #Basically removing 2/3 of the dataset....
+    
 
     amount_before = df.shape[0]
     df = df[df['eventId'].notnull()]
@@ -87,12 +259,12 @@ def replace_NaN_w_0(df, column=False):
         return df
 
 def centered_cosine(df):
-    '''
-        Centered Cosine
-        1. We take the mean of user's activeTime.
-        2. Subtract that mean from all individual activeTime divided by the total number of activeTime by the user.
-        3. For all the activeTimes where there is no time(NaN), we replace it with 0.
-    '''
+    
+    #    Centered Cosine
+    #    1. We take the mean of user's activeTime.
+    #    2. Subtract that mean from all individual activeTime divided by the total number of activeTime by the user.
+    #    3. For all the activeTimes where there is no time(NaN), we replace it with 0.
+    
     # We create view a list of all mean of activetimes that a user had. We then loop on that list by userId.
     #   userId:                                            mean_of_that_user:
     #  'cx:10k2wzm1b3jsk2y5ym1utnjo97:2kefzqaxe9jx7'        13.75
@@ -114,12 +286,12 @@ def centered_cosine(df):
     return df
 
 def replace_none_activetime_with_average(df):
-    ''' 
-        Finding the documentIds with None activeTime. Then find if there exist others in the system
-        that have looked at those specific documentIds with a valid activeTime. Replace the none activeTime
-        with average time of activeTime found.
+     
+    #    Finding the documentIds with None activeTime. Then find if there exist others in the system
+    #    that have looked at those specific documentIds with a valid activeTime. Replace the none activeTime
+    #    with average time of activeTime found.
 
-    '''
+    
     # A DF of values
     documentIds_value = df.loc[df.activeTime.notnull(), ['documentId','activeTime']]
     # A DF of none values
@@ -165,10 +337,10 @@ def preprocessing_data(df):
     return df
 
 def find_documents_in_common(userId_1, userId_2):
-    '''
-        Input: two userIds to look up the users in the dataframe. 
-        Return: a list of documentsIds that the user1 and user2 have in common, None is exluded from the list.
-    '''
+    
+    #    Input: two userIds to look up the users in the dataframe. 
+    #    Return: a list of documentsIds that the user1 and user2 have in common, None is exluded from the list.
+    
     user1_documentids = df.loc[df.userId == userId_1, ['documentId']].documentId.dropna().unique()
     user2_documentids = df.loc[df.userId == userId_2, ['documentId']].documentId.dropna().unique()
     
@@ -181,10 +353,10 @@ def find_documents_in_common(userId_1, userId_2):
     return documents_in_common_user1_user2
 
 def cosine_similarity(df):
-    '''
-        Loop through activeTimes and find similarities for one user towards every users in the system
-        sim(A, B) = Ai * Bi / sqrt( Ai ^2 ) * sqrt( Bi ^2 )
-    '''
+    
+    #    Loop through activeTimes and find similarities for one user towards every users in the system
+    #    sim(A, B) = Ai * Bi / sqrt( Ai ^2 ) * sqrt( Bi ^2 )
+    
 
     users_unique = df['userId'].unique()
     nr_users = len(users_unique)
@@ -283,8 +455,6 @@ def create_rating_matrix(df):
 
     return rating_matrix
 
-
-
 def new_cosine_similarity(rating_matrix, df):
     users_unique = df['userId'].unique()
     nr_users = len(users_unique)
@@ -344,172 +514,7 @@ def cosine_mean(df):
     print(df.head)
     return df
 
-
-
-class UserBasedRecommender:
-    def __init__(self) -> None:
-        # data processing
-        self.data_processing_class = 0
-        self.df = 0
-        self.events = 0
-        self.categories = 0
-
-        # Data generating
-        self.aggregator = 0
-
-        self.train = 0
-        self.test = 0
-        self.nr_tests = 0
-        self.nr_train = 0
-        self.nr_users = 0
-        self.nr_articles = 0
-        self.split_time = 0
-        self.split_eventId = 0
-        self.nr_train_articles = 0
-        self.first_relevant_article = 0
-        self.nr_test_articles = 0
-
-        # Data generate rating and sim matrix's
-        self.rating_matrix = 0
-        self.sim_matrix = 0
-        self.sim_pearson_correlation = 0
-        
-        self.data_processing()
-        self.data_generating()
-        self.data_generate_rating_sim_matrix()
-
-    def new_replace_none_w_average(self, df):
-        documentIds_null = df.loc[df.activeTime.isnull(), ['documentId','activeTime']]
-
-        for _, row  in documentIds_null.iterrows():
-            #documentId = row[0] #activeTime = row[1] #userId = row[2]
-            # go to the agregator class that hold the previously generated "helper data" acess correct column.
-            if np.isnan(row[1]):
-                documentIds_null.loc[documentIds_null.documentId == row[0], 'activeTime'] = self.aggregator.articles.at[row[0], "averageActiveTime"]
-            
-        df.loc[df.activeTime.isnull(), ['documentId','activeTime']] = documentIds_null
     
-        return df
-        
-    def converte_seconds_to_date_format(self, df, column):
-        '''
-            Convert either unix-time from number of seconds since 1970 to a datetime format.
-            The function will also convert datetime format to not include timezone, and be formatted correctly.
-            Currently works on: publishtime and time. df must be a dataframe. column must be a string.
-            Example:
-            input: 1483225227
-            output: 2016-12-31 23:00:27
-            -------------------------------
-            input: 2017-01-01T16:51:55.000Z
-            output: 2017-01-01 16:51:55
-        '''
-        if column == 'time':
-            try:
-                return pd.to_datetime(df[str(column)], unit='s')
-            except:
-                print("Datetime conversion of seconds to date format failed..")
-        elif column == 'publishtime':
-            try: 
-                return pd.to_datetime(df[str(column)]).dt.tz_localize(None)
-            except:
-                print("Datetime conversion date to correct date format failed..")
-        else:
-            return 0
-
-    def data_processing(self):
-        print("starting data processing...")
-        self.data_processing_class = dataUtils.DataUtils()
-        # Load data as a list
-        list_of_data = self.data_processing_class.load_data("active1000", num=0)
-        # Filter the data
-        list_of_filtered_data = self.data_processing_class.filter_data(list_of_data)
-        # Inedx data with ints, docuemntId and userId
-        list_of_indexed_data = self.data_processing_class.index_data(list_of_filtered_data)
-        # Returns a DataFrame based on the list
-        self.df = self.data_processing_class.get_dataframe(list_of_indexed_data)
-        # fix dates 
-        self.df['time'] = self.converte_seconds_to_date_format(self.df, column='time')
-        self.df['publishtime'] = self.converte_seconds_to_date_format(self.df, column='publishtime')
-        # Clean up categorys and fix dates again
-        self.events, self.categories = self.data_processing_class.process_data(self.df)
-        print("done with data processing")
-
-    def data_generating(self):
-        '''
-            Generate helping data, or more data to have the calculations before needing them.
-            E.g. avrage-activeTime of a userId or a documentId.
-        '''
-        print("starting data generating...")
-
-        #Generate train-test split, to get helping data for the dataset.
-        self.train, self.test = sk_train_test_split(self.events, test_size=0.2, shuffle=False)
-        self.nr_tests = len(self.test.index)
-        self.nr_train = len(self.train.index)
-        self.nr_users = self.data_processing_class.nextUserID
-        self.nr_articles = self.data_processing_class.nextDocumentID
-
-        # want to find the time according to the dataset where the split between train and test
-        self.split_time = self.train.iloc[-1]["eventTime"]    # was performed.
-        self.split_eventId = self.train.iloc[-1]["eventId"]
-        self.nr_train_articles = self.train['documentId'].max()
-        self.first_relevant_article = max( self.test['documentId'].min(), int( self.nr_train_articles * 0.95))
-        # Cut most of the articles, and do the assumption that the last 5% articles are 
-        # the ones of relevance to us. This is the last 5 % of the train-set talking about.
-        self.nr_test_articles = self.nr_articles - self.first_relevant_article
-
-        # Sending in train set to aggregator.
-        self.aggregator = DataAggregator(categories=self.categories, strict=False)
-
-        # multithread to speed up processing.
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.submit(self.aggregator.generateArticleData, self.train, self.nr_articles)
-            executor.submit(self.aggregator.generateUserData, self.train, self.nr_users)
-        
-        self.train = self.data_processing_class.fill_missing( self.train, self.aggregator.articles, self.aggregator.users)
-        print("done with data generating.")
-
-
-    def data_generate_rating_sim_matrix(self):
-        print("starting data generate_sim_rating...")
-
-        self.df = pd.DataFrame(self.train)
-
-        self.df = self.new_replace_none_w_average(self.df)
-
-        #df = cosine_mean(df)
-
-        self.aggregator.generateRatingMatrix(self.train, self.nr_users, self.nr_articles)
-
-        self.rating_matrix = self.aggregator.ratings
-        
-        self.sim_matrix = new_cosine_similarity(self.rating_matrix, self.df)
-        self.sim_pearson_correlation = new_cosine_pearson_similarity(self.rating_matrix, self.df)
-
-        print("done with data generate_sim_rating.")
-
-
-    def user_based_predictions(self, userId, documentId, time=None):
-        self.rating_matrix
-
-        return print("yo")
-
-
-if __name__ == '__main__':
-    start = timer()
-    UsB_recommender = UserBasedRecommender()
-    end = timer()
-    print("The time that went by for similarity comparison: ", end-start, "seconds")
-    print("we made it?")
-
-    #TODO:
-    # We want to find a Neighborhood aka a set of users who are most similar to target user
-    # Everyone in that neighborhood must have rated the same documentId that we are considering for the target user
-    # - Let Rx be a vector of user X's ratings
-    # - Let N be the set of k users most similar to X, who have also rated item i
-    # - Option 1: take an average of the neighborhoods rating of item i and that will be the rating for X to item i.
-    # - Option 2: Weighted average of neighboorhood, 
-
-    '''
     df = pd.DataFrame(train)
 
     df = new_replace_none_w_average(df)
@@ -573,15 +578,7 @@ if __name__ == '__main__':
     #load_matrix_from_file_numpy_txt('sim_matrix.txt', 3)
 
     print(df.head())
-    '''
 
-
-
-
-
-
-
-    '''
 
     **************************************************************************************************
 
