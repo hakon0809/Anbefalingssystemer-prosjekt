@@ -36,10 +36,8 @@ class ContentBasedRecommender:
         rated_documents = list(self.user_rated_documents[userId])
         # get the similarity between the article to predict the score for, and all previous ratings
         sim_array = self.similarity_matrix[articleId, rated_documents] # similarity can be negative sometimes??
-        #print(sim_array)
         # get the scores for all previously rated articles
         rated_scores = self.rating_matrix[userId, rated_documents]
-        #print(rated_scores)
         # pairwise multiply the above two arrays, and add those scores together (weighted scores)
         summed_rating = np.dot(sim_array, rated_scores)
         # get the total weights used on the scores (the total amount of similarity)
@@ -161,30 +159,20 @@ def build_content_based_word2vec_similarity_matrix(events):
 
     # max_len = max(len(row) for row in vectors_array) #max number of words in titlecats is 31
     # print(max_len)
-    # print((vectors_array[0]))
 
     # insert vectors into padded matrix
     padded_matrix = np.zeros((vectors_array.shape[0], 31, 100))
-    # TODO think this for loop as well as the double for loop under does the same job, but more certain on the double forloop
     # A possible reason why all rows are to some degree similar are the empty remainder of the 31 max len words for each row
     # eg: 0 is similar to 0 
-    # for enu, row in enumerate(vectors_array):
-    #     padded_matrix[enu, :len(row)] += row
-
     for x in range(vectors_array.shape[0]):
         for y in range(len(vectors_array[x])):
             padded_matrix[x,y,:100] = vectors_array[x][y]
 
-    # print('padded matrix shape: ' + str(padded_matrix.shape))
 
     #concatenate the padded matrix so that we only get a single vector for each row eg titlecat row
     concatinated_matrix = np.asmatrix([np.concatenate(arrays) for arrays in padded_matrix])
 
-    # print('concatenated matrix shape' + str(concatinated_matrix.shape))
-    # print(concatinated_matrix[0])
-
     #build similarity matrix for each titlecat row where the index [0][0] is the similarity of documentId with itself
     similarity_matrix = cosine_similarity(concatinated_matrix)
-    #print(similarity_matrix[:50,:50])
-    #print('similarity matrix shape: '+ str(similarity_matrix.shape))
     return similarity_matrix
+ 
