@@ -1,5 +1,6 @@
 import json
 import os
+import numpy as np
 import pandas as pd
 import datetime as dt
 import time
@@ -14,6 +15,7 @@ class DataUtils:
         self.nextDocumentID = 0
         #self.knownEventIDs = {}
         #self.nextEventID = 0
+        self.baseline = None
 
     def load_data(self, path, num=0):
         data=[]
@@ -67,8 +69,16 @@ class DataUtils:
         return indexed
     
     def get_dataframe(self, entries):
-        #print(entries[0])
         return pd.DataFrame(entries)
+
+    def factorize_data(self, events):
+        events['documentId'] = pd.factorize(events['documentId'], size_hint=22000)[0]
+        events['userId'] = pd.factorize(events['userId'], size_hint=1000)[0]
+        events['eventId'] = events.index
+
+        self.nextDocumentID = events['documentId'].max() + 1
+        self.nextUserID = events['userId'].max() + 1
+        return events
 
     def process_data(self, events):
 
@@ -95,3 +105,38 @@ class DataUtils:
         # TODO: If missing date or category metadata, recover from URL (more powerful if we dont filter out missing documentIDs)
         # TODO: distinguish between time of day missing (date recovered from URL) and midnight time 00:00:00
         return events, allCategories
+
+    def fill_missing(self, events, articles, users):
+        self.baseline = articles["averageActiveTime"].mean()
+        #return events.assign(filledActiveTime=lambda e: bestGuessAverage(e, articles, users, self.baseline))
+        return events.assign(filledActiveTime = events.apply(lambda e: bestGuessAverage(e, articles, users, self.baseline), axis=1))
+
+    def fill_single_missing(self, event, articles, users):
+        #if self.baseline is None:
+        #    self.baseline = articles["averageActiveTime"].mean()
+        event["filledActiveTime"] = bestGuessAverage(event, articles, users, self.baseline)
+        return event
+    
+def bestGuessAverage(event, articles, users, baseline):
+        activeTime = event["activeTime"]
+        hasActiveTime = not np.isnan(activeTime) and not activeTime == 0
+        if hasActiveTime: return activeTime
+        
+        cum = 0
+        cnt = 0 
+        try:
+            userMeanViewTime = users.at[event["userId"], "averageViewTime"] #select by id and get avg viewing time
+            if not np.isnan(userMeanViewTime):
+                cum += userMeanViewTime
+                cnt += 1
+        except KeyError:
+            # If the user hasn't been seen before (id not in users dataframe), then they haven't viewed any articles before
+            pass
+        try:
+            articleMeanActiveTime = articles.at[event["articleId"], "averageActiveTime"]
+            if not np.isnan(articleMeanActiveTime):
+                cum += articleMeanActiveTime
+                cnt += 1
+        except KeyError:
+            pass
+        return cum / cnt if cnt > 0 else baseline

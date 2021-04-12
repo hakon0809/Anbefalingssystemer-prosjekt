@@ -3,10 +3,12 @@ import numpy as np
 
 class DataAggregator:
 
-    def __init__(self, categories):
+    def __init__(self, categories, strict=False):
         self.categories = categories
         self.articles = None
         self.users = None
+        self.ratingCol = 'activeTime' if strict else 'filledActiveTime' # use only true values or use normalized values in the ratings matrix
+        self.ratings = None
     
     def generateArticleData(self, events, nextDocumentID):
         articleList = []
@@ -20,6 +22,7 @@ class DataAggregator:
                 break
 
             data["documentId"] = id
+            data["title"] = articleEvents["title"].mode()
             data["publishtime"] = articleEvents["publishtime"].mode().max().item() # looks if any event has publishtime
             data["firstEventId"] = articleEvents["eventId"].min()
             data["firstEventTime"] = articleEvents.loc[data["firstEventId"]]["eventTime"]
@@ -65,6 +68,22 @@ class DataAggregator:
         df = pd.DataFrame(userList).set_index("userId") # turn list of dicts into dataframe
         df["averageViewTime"] = df["totalViewTime"] / df["activeEvents"] # average view time across all of the user's articles
         self.users = df
+
+    def generateRatingMatrix(self, events, totalNumUsers, totalNumDocuments):
+        # creates a np matrix where ratings[userId, documentId] = users activetime of document
+        df = events[['userId','documentId', self.ratingCol]] # filter only necessary columns
+        rating_matrix = np.zeros((totalNumUsers,totalNumDocuments)) # initialize empty matrix
+        for _, row in df.iterrows():
+            prev = rating_matrix[int(row['userId']), int(row['documentId'])]
+            rating_matrix[int(row['userId']), int(row['documentId'])] = max(prev, row[self.ratingCol])
+            # two clicks is a strong endorsement, but as a basis for predicted scores that assumes a single click, it will often be too long
+        self.ratings = rating_matrix
+    
+    def update_rating(self, event):
+        # only used for rating matrices that are updated between events, live_matrix
+        if not (np.isnan(event[self.ratingCol]) or event[self.ratingCol] == 0.0): 
+            prev = self.ratings[event["userId"], event["documentId"]]
+            self.ratings[event["userId"], event["documentId"]] = max(prev, event[self.ratingCol])
 
     def add_event(self, event):
         articleId = event["documentId"]
