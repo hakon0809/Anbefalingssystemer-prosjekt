@@ -37,10 +37,8 @@ class ContentBasedRecommender:
         rated_documents = list(self.user_rated_documents[userId])
         # get the similarity between the article to predict the score for, and all previous ratings
         sim_array = self.similarity_matrix[articleId, rated_documents] # similarity can be negative sometimes??
-        #print(sim_array)
         # get the scores for all previously rated articles
         rated_scores = self.rating_matrix[userId, rated_documents]
-        #print(rated_scores)
         # pairwise multiply the above two arrays, and add those scores together (weighted scores)
         summed_rating = np.dot(sim_array, rated_scores)
         # get the total weights used on the scores (the total amount of similarity)
@@ -162,169 +160,20 @@ def build_content_based_word2vec_similarity_matrix(events):
 
     # max_len = max(len(row) for row in vectors_array) #max number of words in titlecats is 31
     # print(max_len)
-    # print((vectors_array[0]))
 
     # insert vectors into padded matrix
     padded_matrix = np.zeros((vectors_array.shape[0], 31, 100))
-    # TODO think this for loop as well as the double for loop under does the same job, but more certain on the double forloop
     # A possible reason why all rows are to some degree similar are the empty remainder of the 31 max len words for each row
     # eg: 0 is similar to 0 
-    # for enu, row in enumerate(vectors_array):
-    #     padded_matrix[enu, :len(row)] += row
-
     for x in range(vectors_array.shape[0]):
         for y in range(len(vectors_array[x])):
             padded_matrix[x,y,:100] = vectors_array[x][y]
 
-    # print('padded matrix shape: ' + str(padded_matrix.shape))
 
     #concatenate the padded matrix so that we only get a single vector for each row eg titlecat row
     concatinated_matrix = np.asmatrix([np.concatenate(arrays) for arrays in padded_matrix])
 
-    # print('concatenated matrix shape' + str(concatinated_matrix.shape))
-    # print(concatinated_matrix[0])
-
     #build similarity matrix for each titlecat row where the index [0][0] is the similarity of documentId with itself
     similarity_matrix = cosine_similarity(concatinated_matrix)
-    #print(similarity_matrix[:50,:50])
-    #print('similarity matrix shape: '+ str(similarity_matrix.shape))
     return similarity_matrix
-
-""" def predict_active_time(trainEvents, testEvents, nUsers, nArticles, similarity_matrix, rating_matrix):
-    #sum(sigma (similarity * activetime))/sigma(similarity)
-    # similar to item-based neighborhood models - Adjusted cosine similarity
-
-    # initialize test rating matrices
-    pred = np.zeros((nUsers, nArticles))
-    actual = np.zeros((nUsers, nArticles))
-    
-    master_train_documents = trainEvents.dropna(subset=['activeTime'])[["userId", "documentId"]].set_index("userId")
-    master_test_documents = testEvents.dropna(subset=['activeTime'])[["userId", "documentId"]].set_index("userId")
-    # ^get all events, where activetime is not missing, drop excess columns, and sort by userId
-
-    #predict scores for all users based on the 20% test split for each user
-    for user in range(nUsers):
-        #get training indexes and actual active time values
-        train_user_rated_documents = master_train_documents.loc[user].get("documentId").to_list()
-            # ^get all documentIds of documents in the training set the user gave an activetime
-        train_user_ratings = rating_matrix[user, train_user_rated_documents]
-
-        #get test indexes and actual active time values for test
-        test_user_rated_documents = master_test_documents.loc[user].get("documentId").to_list()
-        test_user_ratings = rating_matrix[user, test_user_rated_documents]
-
-        #loop through test index array to predict values for those articles
-        for document in test_user_rated_documents:
-            # 1d cosine similarity array between all train active_time scores and target test index
-            sim_array = similarity_matrix[train_user_rated_documents, document]
-            #summed product between cosine similarities and train active_time score
-            summed_rating = np.dot(sim_array, train_user_ratings)
-            #sum of train cosine similarity to target test index
-            sim_sum = np.sum(np.absolute(sim_array))
-            #predicted score
-            pred[user, document] = summed_rating/sim_sum
-            actual[user, document] = test_user_ratings[document] # save true rating for later comparison
-
-    return pred, actual # actual should be equal to actual in main now. """
-'''
-#recommend most similar to item read with highest active time
-def content_recommendation_m1(rating_matrix, similarity_matrix, train, test):
-    pred = []
-    actual = []
-
-    for user in range(rating_matrix.shape[0]):
-        train_index_array = train[user, :].nonzero()[0]
-        train_value_array = rating_matrix[user,train_index_array]
-
-        test_user_rated_documents = test[user, :].nonzero()[0]
-        test_user_ratings = rating_matrix[user,test_user_rated_documents]
-        actual.append(test_user_rated_documents)
-
-        highest_train_active_time_doc = train_index_array[np.argmax(train_value_array)]
-
-        nr_predictions = len(test_user_rated_documents) + 1
-        sim_array = similarity_matrix[highest_train_active_time_doc,:]
-        user_pred = []
-        while nr_predictions > 0:
-            prediction = np.argmax(sim_array)
-            sim_array[prediction] = 0
-
-            user_pred.append(prediction)
-            nr_predictions -= 1
-
-        # slice first element to remove similarity between the document itself 
-        pred.append(user_pred[1:])
-        # pred += [user_pred[1:] for i in range(len(test_user_rated_documents))]
-
-
-    actual = [x for row in actual for x in row] 
-    return pred, actual
-    # print(result)
-
-#recommend most similar to item with highest active time, not previously read
-def content_recommendation_m2(rating_matrix, similarity_matrix, train, test):
-    pred = []
-    actual = []
-    
-    for user in range(rating_matrix.shape[0]):
-        train_index_array = train[user, :].nonzero()[0]
-        train_value_array = rating_matrix[user,train_index_array]
-
-        test_user_rated_documents = test[user, :].nonzero()[0]
-        test_user_ratings = rating_matrix[user,test_user_rated_documents]
-        actual.append(test_user_rated_documents)
-
-        highest_train_active_time_doc = train_index_array[np.argmax(train_value_array)]
-
-        nr_predictions = len(test_user_rated_documents) + 1
-        sim_array = similarity_matrix[highest_train_active_time_doc,:]
-        user_pred = []
-        while nr_predictions > 0:
-            prediction = np.argmax(sim_array)
-            sim_array[prediction] = 0
-            if not prediction in train_index_array:
-                user_pred.append(prediction)
-                nr_predictions -= 1
-            else:
-                pass
-        # slice first element to remove similarity between the document itself 
-        pred.append(user_pred[1:])
-        # pred += [user_pred[1:] for i in range(len(test_user_rated_documents))]
-
-    actual = [x for row in actual for x in row] 
-    return pred, actual
-
-#recommend k most similar to item with highest active time, not previously read
-def content_recommendation_m3(k, rating_matrix, similarity_matrix, trainEvents, testEvents):
-    pred = []
-    actual = []
-    
-    for user in range(rating_matrix.shape[0]):
-        train_index_array = trainEvents.set_index("userId").loc[user].get("documentId")
-        train_value_array = rating_matrix[user,train_index_array]
-
-        test_user_rated_documents = testEvents.set_index("userId").loc[user].get("documentId")
-        test_user_ratings = rating_matrix[user,test_user_rated_documents]
-        actual.append(test_user_rated_documents)
-
-        highest_train_active_time_doc = train_index_array[np.argmax(train_value_array)]
-
-        nr_predictions = len(test_user_rated_documents) * k + 1
-        sim_array = similarity_matrix[highest_train_active_time_doc,:]
-        user_pred = []
-        while nr_predictions > 0:
-            prediction = np.argmax(sim_array)
-            sim_array[prediction] = 0
-            if not prediction in train_index_array:
-                user_pred.append(prediction)
-                nr_predictions -= 1
-            else:
-                pass
-        # slice first element to remove similarity between the document itself 
-        pred.append(user_pred[1:])
-        # pred += [user_pred[1:] for i in range(len(test_user_rated_documents))]
-
-    actual = [x for row in actual for x in row] 
-    return pred, actual
-'''
  
