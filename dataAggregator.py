@@ -81,7 +81,7 @@ class DataAggregator:
     
     def update_rating(self, event):
         # only used for rating matrices that are updated between events, live_matrix
-        if not (np.isnan(event[self.ratingCol]) or event[self.ratingCol] == 0.0): 
+        if not (np.isnan(event[self.ratingCol]) or event[self.ratingCol] == 0.0): # if event has a new rating (not zero/missing)
             prev = self.ratings[event["userId"], event["documentId"]]
             self.ratings[event["userId"], event["documentId"]] = max(prev, event[self.ratingCol])
 

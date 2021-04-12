@@ -7,6 +7,7 @@ import nltk
 from nltk.corpus import stopwords
 import re
 import time
+from heapq import heappush, nlargest
 
 from sklearn.metrics.pairwise import linear_kernel, cosine_similarity
 # from rake_nltk import Rake
@@ -15,21 +16,27 @@ from gensim.models import Word2Vec
 from evalMethods import evaluate_mse, evaluate_arhr, evaluate_recall 
 
 class ContentBasedRecommender:
-    def __init__(self, trainEvents, events, rating_matrix):
-        # self.trainEvents = trainEvents
-        # self.testEvents = testEvents
+    def __init__(self, trainEvents, events, rating_matrix, method=1):
+        meth = [self.predictNextClickAllTimeHighestExpectedUnread,
+                self.predictNextClickMostSimilarToRecent,
+                self.predictNextClickMostSimilarToBest,
+                self.predictNextClickBestOfBoth]
+
         nltk.download('stopwords')
         self.similarity_matrix = build_content_based_word2vec_similarity_matrix(events)
         self.rating_matrix = rating_matrix 
         self.user_rated_documents = get_initial_user_rated_documents(trainEvents, rating_matrix.shape[0])
-        #self.predictions, self.actual = predict_active_time(trainEvents, testEvents, nUsers, nArticles, self.similarity_matrix, self.rating_matrix)
+        self.predictNextClick = meth[method] # select method here
+        self.known_document_ids = set(trainEvents.get("documentId"))
+        self.recencyThreshold = 100
+
 
     def predictScore(self, userId, articleId, time):
         #return self.predictions[userId, articleId] #self.actual[userId]
         # get all documentIds that have a proper rating
         rated_documents = list(self.user_rated_documents[userId])
         # get the similarity between the article to predict the score for, and all previous ratings
-        sim_array = self.similarity_matrix[articleId, rated_documents] # does this work...?
+        sim_array = self.similarity_matrix[articleId, rated_documents] # similarity can be negative sometimes??
         #print(sim_array)
         # get the scores for all previously rated articles
         rated_scores = self.rating_matrix[userId, rated_documents]
@@ -43,14 +50,69 @@ class ContentBasedRecommender:
             return 0.0
         return summed_rating/sim_sum
 
-    def predictNextClick(self, userId, time, k=10):
-        # TODO: filter out articles that the user has already looked at?
-        return np.argpartition(self.rating_matrix[userId], -k)[-k:]
+    def predictNextClickAllTimeHighestExpectedUnread(self, userId, time, k=10): # immense processing costs. unusable
+        rated_documents = list(self.user_rated_documents[userId])
+        rated_scores = self.rating_matrix[userId, rated_documents]
+        viable_documents = {id for id in self.known_document_ids if id > max(self.known_document_ids) - self.recencyThreshold and id not in rated_documents} #self.known_document_ids - self.user_rated_documents[userId] #[doc for doc in self.known_document_ids if doc not in rated_documents]
+        heap = []
+        for document in viable_documents:
+            sim_array = self.similarity_matrix[document, rated_documents]
+            summed_rating = np.dot(sim_array, rated_scores)
+            sim_sum = np.sum(np.absolute(sim_array))
+            if (np.isnan(summed_rating) or sim_sum == 0.0 or np.isnan(sim_sum) or np.isnan(summed_rating/sim_sum)):
+                continue
+            score = summed_rating/sim_sum
+            heappush(heap, (score, document))
+        
+        return [tup[1] for tup in nlargest(k, heap)]
+    
+    def predictNextClickMostSimilarToRecent(self, userId, time, k=10): # method 1
+        rated_documents = self.user_rated_documents[userId]
+        most_recent = max(rated_documents) if rated_documents else max(self.known_document_ids) # hack for efficiency, not truly most recent
+        similarity_scores = self.similarity_matrix[most_recent].copy()
+        similarity_scores[list(rated_documents)] = 0.0 # make sure previously clicked documents are ignored
+        return list(np.argpartition(similarity_scores, -k)[-k:]) # funky way to get document Ids (indices) of k highest scores
+
+    def predictNextClickMostSimilarToBest(self, userId, time, k=10): # method 2
+        rated_documents = list(self.user_rated_documents[userId])
+        rated_scores = self.rating_matrix[userId, rated_documents]
+        top_rated = rated_documents[list(rated_scores).index(max(rated_scores))] if rated_scores.size else max(self.known_document_ids)
+        similarity_scores = self.similarity_matrix[top_rated].copy()
+        similarity_scores[rated_documents] = 0.0
+        return list(np.argpartition(similarity_scores, -k)[-k:])
+
+    def predictNextClickBestOfBoth(self, userId, time, k=10): # method 3: take options from 1 and 2, then sort by predicted scores
+        rated_documents = list(self.user_rated_documents[userId])
+        rated_scores = self.rating_matrix[userId, rated_documents]
+
+        if not (rated_documents and rated_scores.size):
+            return self.predictNextClickMostSimilarToBest(userId, time, k)
+        
+        most_recent = max(rated_documents) 
+        top_rated = rated_documents[list(rated_scores).index(max(rated_scores))] 
+        document_pair = [most_recent, top_rated]
+        score_pair = [rated_scores[rated_documents.index(most_recent)], max(rated_scores)] #rated_scores[document_pair]
+
+        closest_to_recent = self.predictNextClickMostSimilarToRecent(userId, time, k)
+        closest_to_best = self.predictNextClickMostSimilarToBest(userId, time, k)
+        viable_documents = set(closest_to_recent).union(set(closest_to_best))
+
+        heap = []
+        for document in viable_documents:
+            sim_array = self.similarity_matrix[document, document_pair]
+            summed_rating = np.dot(sim_array, score_pair)
+            sim_sum = np.sum(np.absolute(sim_array))
+            if (np.isnan(summed_rating) or sim_sum == 0.0 or np.isnan(sim_sum) or np.isnan(summed_rating/sim_sum)):
+                continue
+            score = summed_rating/sim_sum
+            heappush(heap, (score, document))
+        return [tup[1] for tup in nlargest(k, heap)]
 
     def add_event(self, event):
         # if event contains an activetime, add the documentId to the users confirmed rated documents
         if isRating(event["activeTime"]):
             self.user_rated_documents[event["userId"]].add(event["documentId"])
+        self.known_document_ids.add(event["documentId"])
         
 def isRating(activeTime):
     return not (np.isnan(activeTime) or activeTime == 0.0)
@@ -164,7 +226,7 @@ def build_content_based_word2vec_similarity_matrix(events):
             actual[user, document] = test_user_ratings[document] # save true rating for later comparison
 
     return pred, actual # actual should be equal to actual in main now. """
-
+'''
 #recommend most similar to item read with highest active time
 def content_recommendation_m1(rating_matrix, similarity_matrix, train, test):
     pred = []
@@ -264,5 +326,5 @@ def content_recommendation_m3(k, rating_matrix, similarity_matrix, trainEvents, 
 
     actual = [x for row in actual for x in row] 
     return pred, actual
-
+'''
  
