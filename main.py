@@ -92,11 +92,12 @@ if __name__ == '__main__':
     print(f"Training on {nTrain} events...")
     # TODO: Add other recommenders here, perform training here
 
-    #meanScore = MeanScoreRecommender(agg.articles, agg.users)
-    #mostRecent = MostRecentRecommender(agg.articles, K)
-    #mostPopular = MostPopularRecommender(agg.articles, splitEventId)
+    meanScore = MeanScoreRecommender(agg.articles, agg.users)
+    mostRecent = MostRecentRecommender(agg.articles, K)
+    mostPopular = MostPopularRecommender(agg.articles, splitEventId)
 
-    contentBasedM2 = ContentBasedRecommender(train, events, agg.ratings, method=2)
+    contentBasedM1 = ContentBasedRecommender(train, events, agg.ratings)
+    #contentBasedM2 = ContentBasedRecommender(train, events, agg.ratings, method=2)
     #contentBasedM3 = ContentBasedRecommender(train, events, agg.ratings, method=3)
 
     print(f"Testing on {nTest} events, tracking score for {nTestArticles} articles...")
@@ -115,7 +116,6 @@ if __name__ == '__main__':
     results = [] # ("name", list, array) evaluates list for recall and arhr, and array for mse, and prints with name
 
     # Initialize each recommenders result data
-    """ 
     meanScores = np.zeros((nUsers, nTestArticles)) # predicted scores per new article for each user, for testing MSE, for recommenders that implement predictScore
     msePairs.append((meanScore, meanScores)) # add recommender + result array to a shorthand for looping
     #clickPairs.append((meanScore, meanScoreClicks)) # mean score baseline does not predict clicks
@@ -131,18 +131,27 @@ if __name__ == '__main__':
     mostPopularClicks = []
     clickPairs.append((mostPopular, mostPopularClicks))
     adders.append(mostPopular)
-    results.append(("MostPopular", None, mostPopularClicks)) """
+    results.append(("MostPopular", None, mostPopularClicks))
 
+    contentBasedClicksM1 = []
+    contentBasedScores = np.zeros((nUsers, nTestArticles))
+    clickPairs.append((contentBasedM1, contentBasedClicksM1))
+    adders.append(contentBasedM1)
+    msePairs.append((contentBasedM1, contentBasedScores))
+    results.append(("ContentBasedM1", contentBasedScores, contentBasedClicksM1))
+
+    '''
     contentBasedClicksM2 = []
     contentBasedScores = np.zeros((nUsers, nTestArticles))
     clickPairs.append((contentBasedM2, contentBasedClicksM2))
     adders.append(contentBasedM2)
-    msePairs.append((contentBasedM2, contentBasedScores))
     results.append(("ContentBasedM2", contentBasedScores, contentBasedClicksM2))
+
     #contentBasedClicksM3 = []
     #clickPairs.append((contentBasedM3, contentBasedClicksM3))
     #adders.append(contentBasedM3)
     #results.append(("ContentBasedM3", None, contentBasedClicksM3))
+    '''
 
     for eventId, event in test.iterrows():
         event = dataHelper.fill_single_missing(event, agg.articles, agg.users)
@@ -195,6 +204,3 @@ if __name__ == '__main__':
     print("Results:")
     resultsHeader = ["Method", "Recall", "ARHR", "MSE"]
     print(tabulate(resultsTable, headers=resultsHeader, colalign=("left", "right", "right", "right")))
-
-    # MostRecent does badly, maybe because some?? articles lack a publishtime, making them a non-option
-    # TODO: add a firstEventTime to dataUtils that substitutes publishtime when missing?
