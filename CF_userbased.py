@@ -155,8 +155,8 @@ class UserBasedRecommender:
 
         self.rating_matrix = self.aggregator.ratings
         
-        self.sim_matrix = new_cosine_similarity(self.rating_matrix, self.df)
-        self.sim_pearson_correlation = new_cosine_pearson_similarity(self.rating_matrix, self.df)
+        self.sim_matrix = self.new_cosine_similarity(self.rating_matrix, self.df)
+        self.sim_pearson_correlation = self.new_cosine_pearson_similarity(self.rating_matrix, self.df)
 
         print("done with data generate_sim_rating.")
 
